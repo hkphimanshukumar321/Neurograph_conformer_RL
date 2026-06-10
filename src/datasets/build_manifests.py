@@ -23,25 +23,35 @@ def find_dataset_roots(detected_csv: str) -> dict:
         roots = set()
         for path in group["path"].dropna():
             p = Path(path)
-            # Find the highest level directory inside the search roots that isn't the raw file itself
-            # For BIDS, the root is usually the folder containing participants.tsv
-            if p.name == "participants.tsv":
-                roots.add(str(p.parent))
-            elif "sub-" in p.parts:
-                # The root is the folder containing 'sub-*'
-                sub_idx = [i for i, part in enumerate(p.parts) if part.startswith("sub-")][0]
-                roots.add(str(Path(*p.parts[:sub_idx])))
+            
+            # For BIDS datasets, the root is exactly the folder BEFORE 'sub-*'
+            if dataset in ["chisco", "thinking_out_loud"]:
+                if p.name == "participants.tsv":
+                    roots.add(str(p.parent))
+                elif any(part.startswith("sub-") for part in p.parts):
+                    sub_idx = [i for i, part in enumerate(p.parts) if part.startswith("sub-")][0]
+                    roots.add(str(Path(*p.parts[:sub_idx])))
+                # Ignored: random files matching the keyword but not in BIDS structure
             else:
-                # Fallback: just use the parent dir if it's deeply nested
-                roots.add(str(p.parent))
+                # For ZuCo and KaraOne, we find the part of the path named 'zuco' or 'karaone'
+                target_name = "zuco" if dataset == "zuco" else "karaone"
+                found_match = False
+                for i, part in enumerate(p.parts):
+                    if target_name in part.lower():
+                        roots.add(str(Path(*p.parts[:i+1])))
+                        found_match = True
+                        break
+                if not found_match:
+                    roots.add(str(p.parent))
+                    
+        # Filter out _linked symlink folders
+        filtered_roots = {r for r in roots if "_linked" not in r}
         
-        # Consolidate roots: keep the deepest, most specific roots and discard 
-        # shallow parent directories (like /home/user) that accidentally got matched.
-        sorted_roots = sorted(list(roots), key=lambda x: len(x), reverse=True)
+        # Consolidate: keep the shortest valid roots to avoid duplicates
+        sorted_roots = sorted(list(filtered_roots), key=lambda x: len(x))
         final_roots = []
         for r in sorted_roots:
-            # If `r` is a shallow parent of an already found deeper root `fr`, skip `r`.
-            if not any(fr.startswith(r) and fr != r for fr in final_roots):
+            if not any(r.startswith(fr) and r != fr for fr in final_roots):
                 final_roots.append(r)
                 
         dataset_roots[dataset] = final_roots
