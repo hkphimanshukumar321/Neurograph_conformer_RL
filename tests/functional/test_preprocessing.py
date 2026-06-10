@@ -144,3 +144,48 @@ class TestQualityMetrics:
         data[3, :] = 0.0  # Flat channel
         metrics = compute_quality_metrics(data, sfreq=250.0)
         assert metrics is not None
+
+class TestHarmonizationCorrectness:
+    """Verify that EEG filtering and channel harmonization work correctly."""
+
+    def test_filter_resampling(self):
+        import mne
+        from src.preprocessing.filters import EEGFilter
+        
+        info = mne.create_info(ch_names=['Fp1', 'Cz'], sfreq=500.0, ch_types='eeg')
+        data = np.random.randn(2, 2000) # 4 seconds at 500Hz
+        raw = mne.io.RawArray(data, info)
+        
+        filt = EEGFilter(target_sfreq=250.0, l_freq=1.0, h_freq=40.0, notch_freqs=[50.0])
+        out_raw = filt(raw)
+        
+        # 4 seconds at 250Hz should be 1000 samples
+        assert out_raw.info['sfreq'] == 250.0
+        assert out_raw.get_data().shape == (2, 1000)
+
+    def test_channel_harmonization(self):
+        import mne
+        from src.preprocessing.channel_harmonization import ChannelHarmonizer, STANDARD_CHANNELS
+        
+        # Simulate a 128-channel input that is missing Cz and has some weird extra channels
+        input_channels = [f'Ch{i}' for i in range(128)]
+        input_channels[0] = 'Fp1'
+        input_channels[1] = 'Extra1'
+        # Deliberately missing Cz
+        
+        info = mne.create_info(ch_names=input_channels, sfreq=250.0, ch_types='eeg')
+        data = np.random.randn(128, 500)
+        raw = mne.io.RawArray(data, info)
+        
+        harmonizer = ChannelHarmonizer()
+        
+        # We must disable mne logging as it can be verbose during interpolation
+        mne.set_log_level('WARNING')
+        out_raw = harmonizer(raw)
+        
+        # Output should have exactly len(STANDARD_CHANNELS) channels
+        assert len(out_raw.ch_names) == len(STANDARD_CHANNELS)
+        assert out_raw.ch_names == STANDARD_CHANNELS
+        
+        # Shape should be (61, 500)
+        assert out_raw.get_data().shape == (len(STANDARD_CHANNELS), 500)
