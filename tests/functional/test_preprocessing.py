@@ -133,16 +133,18 @@ class TestQualityMetrics:
 
     def test_quality_metrics_keys(self):
         from src.preprocessing.quality import compute_quality_metrics
-        data = np.random.randn(9, 500).astype(np.float64)
-        metrics = compute_quality_metrics(data, sfreq=250.0)
-        assert "mean_amplitude" in metrics
-        assert "max_amplitude" in metrics
+        data = np.random.randn(15, 9, 500).astype(np.float64)
+        labels = np.zeros(15, dtype=int)
+        metrics = compute_quality_metrics(data, labels, sfreq=250.0)
+        assert hasattr(metrics, "mean_amplitude_uv")
+        assert hasattr(metrics, "max_amplitude_uv")
 
     def test_quality_detects_flat_channels(self):
         from src.preprocessing.quality import compute_quality_metrics
-        data = np.random.randn(9, 500).astype(np.float64)
-        data[3, :] = 0.0  # Flat channel
-        metrics = compute_quality_metrics(data, sfreq=250.0)
+        data = np.random.randn(15, 9, 500).astype(np.float64)
+        labels = np.zeros(15, dtype=int)
+        data[:, 3, :] = 0.0  # Flat channel
+        metrics = compute_quality_metrics(data, labels, sfreq=250.0)
         assert metrics is not None
 
 class TestHarmonizationCorrectness:

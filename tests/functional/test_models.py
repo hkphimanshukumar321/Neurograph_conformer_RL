@@ -136,13 +136,14 @@ class TestLossFunctions:
     def test_ctc_loss_backward(self):
         from src.models.losses import CTCLoss
         loss_fn = CTCLoss(blank_id=0)
-        log_probs = torch.randn(20, BATCH, 30, requires_grad=True).log_softmax(2)
+        logits = torch.randn(20, BATCH, 30, requires_grad=True)
+        log_probs = logits.log_softmax(2)
         targets = torch.randint(1, 30, (BATCH, 5))
         input_lengths = torch.full((BATCH,), 20, dtype=torch.long)
         target_lengths = torch.full((BATCH,), 5, dtype=torch.long)
         loss = loss_fn(log_probs, targets, input_lengths, target_lengths)
         loss.backward()
-        assert log_probs.grad is not None
+        assert logits.grad is not None
 
 
 # ──── Determinism ────

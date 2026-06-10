@@ -14,6 +14,7 @@ from sklearn.metrics import (
     confusion_matrix,
     f1_score,
     top_k_accuracy_score,
+    cohen_kappa_score,
 )
 
 
@@ -24,10 +25,12 @@ class ClassificationMetrics:
     accuracy: float = 0.0
     balanced_accuracy: float = 0.0
     macro_f1: float = 0.0
+    cohens_kappa: float = 0.0
     top_3_accuracy: float = 0.0
     top_5_accuracy: float = 0.0
     confusion: np.ndarray = field(default_factory=lambda: np.array([]))
     per_class_accuracy: dict[str, float] = field(default_factory=dict)
+    per_class_f1: list[float] = field(default_factory=list)
 
 
 @dataclass
@@ -82,6 +85,10 @@ def compute_classification_metrics(
     metrics.accuracy = accuracy_score(y_true, y_pred)
     metrics.balanced_accuracy = balanced_accuracy_score(y_true, y_pred)
     metrics.macro_f1 = f1_score(y_true, y_pred, average="macro", zero_division=0)
+    metrics.cohens_kappa = cohen_kappa_score(y_true, y_pred)
+    
+    per_cls_f1 = f1_score(y_true, y_pred, average=None, zero_division=0)
+    metrics.per_class_f1 = list(float(x) for x in per_cls_f1)
 
     if y_prob is not None:
         k_max = min(3, y_prob.shape[1])
