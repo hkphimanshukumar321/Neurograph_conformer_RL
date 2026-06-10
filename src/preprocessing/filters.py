@@ -45,3 +45,22 @@ class EEGFilter:
             raw.resample(sfreq=self.target_sfreq, verbose=False)
             
         return raw
+
+# --- Functional Wrappers for compatibility with existing pipeline.py ---
+
+def bandpass_filter(raw: mne.io.BaseRaw, l_freq: float, h_freq: float, method: str = 'fir') -> mne.io.BaseRaw:
+    raw.load_data()
+    raw.filter(l_freq=l_freq, h_freq=h_freq, filter_length='auto', phase='zero', method=method, verbose=False)
+    return raw
+
+def notch_filter(raw: mne.io.BaseRaw, freqs: list[float]) -> mne.io.BaseRaw:
+    raw.load_data()
+    valid_freqs = [f for f in freqs if f < raw.info['sfreq'] / 2.0]
+    if valid_freqs:
+        raw.notch_filter(freqs=valid_freqs, filter_length='auto', phase='zero', verbose=False)
+    return raw
+
+def resample(raw: mne.io.BaseRaw, sfreq: float) -> mne.io.BaseRaw:
+    if not np.isclose(raw.info['sfreq'], sfreq):
+        raw.resample(sfreq=sfreq, verbose=False)
+    return raw
