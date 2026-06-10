@@ -56,6 +56,7 @@ class NeuroGraphConformer(nn.Module):
     ):
         super().__init__()
         self.cfg = cfg
+        self.n_channels = n_channels
         arch = cfg.get("arch", cfg)  # handle nested config
         d_model = arch.get("encoder", {}).get("d_model", 128)
 
@@ -99,6 +100,15 @@ class NeuroGraphConformer(nn.Module):
         # ──── 1b. Lightweight EEG Front-End (Ghost-DWASPP-CAS) ────
         lw_cfg = arch.get("lightweight_frontend", {})
         self.use_lightweight_frontend = lw_cfg.get("enabled", False)
+
+        # Guard: lightweight frontend requires extract_time_frequency(),
+        # which only exists on WaveletFrontEnd and FilterBankFrontEnd.
+        if self.use_lightweight_frontend and frontend_type not in ("cwt", "filterbank"):
+            raise ValueError(
+                f"Lightweight front-end requires frontend.type in {{'cwt', 'filterbank'}}, "
+                f"but got '{frontend_type}'. Either set frontend.type to 'cwt'/'filterbank' "
+                f"or disable lightweight_frontend.enabled."
+            )
 
         if self.use_lightweight_frontend:
             lw_out = lw_cfg.get("out_features", d_model)
@@ -229,14 +239,60 @@ class NeuroGraphConformer(nn.Module):
             )
             self.generation_head = GenerationHead(decoder=decoder, d_model=d_model)
 
-        # Count parameters
-        total_params = sum(p.numel() for p in self.parameters())
-        trainable_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
-        logger.info(
-            f"NeuroGraphConformer initialized: "
-            f"{total_params / 1e6:.2f}M total params, "
-            f"{trainable_params / 1e6:.2f}M trainable"
+        # Count parameters (may fail if LazyLinear hasn't been initialized)
+        try:
+            total_params = sum(p.numel() for p in self.parameters())
+            trainable_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
+            logger.info(
+                f"NeuroGraphConformer initialized: "
+                f"{total_params / 1e6:.2f}M total params, "
+                f"{trainable_params / 1e6:.2f}M trainable"
+            )
+        except ValueError:
+            # nn.LazyLinear params aren't materialized yet
+            logger.info(
+                "NeuroGraphConformer initialized (param count deferred "
+                "until first forward pass due to lazy modules)"
+            )
+
+    def _get_or_create_adj(
+        self,
+        adj: torch.Tensor | None,
+        n_nodes: int,
+        device: torch.device,
+    ) -> torch.Tensor:
+        """Return the provided adjacency matrix, or build a dense identity
+        fallback so that GraphSpatialEncoder.forward() never receives None.
+
+        The identity adjacency (all ones) treats every node pair as connected
+        with equal weight — equivalent to full self-attention. This is safe
+        as a default because the GATv2 attention mechanism will still learn
+        to weight edges appropriately.
+
+        Parameters
+        ----------
+        adj : torch.Tensor | None
+            User-provided adjacency, shape (N, N) or (B, N, N).
+        n_nodes : int
+            Number of graph nodes (electrodes).
+        device : torch.device
+            Target device.
+
+        Returns
+        -------
+        torch.Tensor
+            Adjacency matrix, shape (N, N).
+        """
+        if adj is not None:
+            return adj
+        logger.warning(
+            "Graph spatial encoder selected but no adjacency matrix provided. "
+            "Falling back to dense (all-ones) adjacency of shape (%d, %d). "
+            "For best results, supply electrode-position-based adjacency.",
+            n_nodes,
+            n_nodes,
         )
+        return torch.ones(n_nodes, n_nodes, device=device)
 
     def encode(
         self,
@@ -276,7 +332,8 @@ class NeuroGraphConformer(nn.Module):
             x_graph_in = x_graph_in.reshape(B * T_dim, N, D)
 
             # 4. Graph spatial encoder at each time step: (B*T', N, D_g)
-            if self.spatial_type == "graph" and adj is not None:
+            if self.spatial_type == "graph":
+                adj = self._get_or_create_adj(adj, N, x_graph_in.device)
                 x_graph = self.spatial_encoder(x_graph_in, adj)
             else:
                 x_graph = self.spatial_encoder(x_graph_in)
@@ -290,12 +347,14 @@ class NeuroGraphConformer(nn.Module):
             x_seq = self.node_pool(x_graph)
 
         else:
-            # ---- Original path: unchanged ----
+            # ---- Original path ----
             # Front-end: (batch, N, T) → (batch, N, d_frontend)
             x = self.frontend(x)
 
             # Spatial encoding
-            if self.spatial_type == "graph" and adj is not None:
+            if self.spatial_type == "graph":
+                N = x.shape[1]
+                adj = self._get_or_create_adj(adj, N, x.device)
                 x_seq = self.spatial_encoder(x, adj)
             else:
                 x_seq = self.spatial_encoder(x)

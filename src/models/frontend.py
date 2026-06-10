@@ -129,26 +129,34 @@ class WaveletFrontEnd(nn.Module):
         # Reshape: treat each channel independently
         x_flat = x.reshape(batch * n_ch, 1, n_time)
 
-        # Expand to (batch*C, F, T) by repeating input for each freq
+        # Expand to (batch*C*F, 1, T) by repeating input for each freq
         x_expand = x_flat.expand(-1, self.n_freqs, -1)
         x_expand = x_expand.reshape(batch * n_ch * self.n_freqs, 1, n_time)
+
+        # For grouped conv1d: input needs shape (1, groups, T) and
+        # weight needs shape (groups, 1, K) with groups = batch*C*F
+        n_groups = batch * n_ch * self.n_freqs
+        x_expand = x_expand.reshape(1, n_groups, n_time)
 
         # Expand kernels: (F, 1, K) → (batch*C*F, 1, K)
         kr = self.kernels_real.repeat(batch * n_ch, 1, 1)
         ki = self.kernels_imag.repeat(batch * n_ch, 1, 1)
 
-        # Grouped conv1d
-        real = F.conv1d(x_expand, kr, padding=self.padding, groups=batch * n_ch * self.n_freqs)
-        imag = F.conv1d(x_expand, ki, padding=self.padding, groups=batch * n_ch * self.n_freqs)
-
+        # Grouped conv1d — each group applies one wavelet kernel to one channel
+        real = F.conv1d(x_expand, kr, padding=self.padding, groups=n_groups)
+        imag = F.conv1d(x_expand, ki, padding=self.padding, groups=n_groups)
+        # Output shape: (1, n_groups, T_out) → squeeze batch dim
         # Power: |z|^2 = real^2 + imag^2
-        power = real.squeeze(1) ** 2 + imag.squeeze(1) ** 2  # (batch*C*F, T)
-        power = power.reshape(batch, n_ch, self.n_freqs, n_time)
+        real = real.squeeze(0)   # (n_groups, T_out)
+        imag = imag.squeeze(0)   # (n_groups, T_out)
+        power = real ** 2 + imag ** 2  # (batch*C*F, T_out)
+        t_conv = power.shape[-1]
+        power = power.reshape(batch, n_ch, self.n_freqs, t_conv)
 
         # Temporal downsampling
         if self.time_downsample > 1:
             power = F.avg_pool2d(
-                power.reshape(batch * n_ch, self.n_freqs, n_time).unsqueeze(1),
+                power.reshape(batch * n_ch, self.n_freqs, t_conv).unsqueeze(1),
                 kernel_size=(1, self.time_downsample),
                 stride=(1, self.time_downsample),
             ).squeeze(1)
