@@ -50,12 +50,18 @@ def parse_bids_dataset(dataset_name: str, root_path: str):
                     "sex": "n/a"
                 })
                 
-    # 2. Parse sessions & trials by globbing *_events.tsv
-    # Events TSV links timing to the EEG continuous files.
-    events_files = list(root_path.rglob("*_events.tsv"))
+    # 2. Parse sessions & trials by globbing *_events.tsv or events.tsv
+    events_files = list(root_path.rglob("*events.tsv")) + list(root_path.rglob("*events.csv"))
+    
+    if not events_files:
+        logger.warning(f"No events files found in {root_path}! Cannot generate trials.")
+        
     for ev_file in events_files:
         # e.g. sub-01_ses-01_task-inner_run-01_events.tsv
-        parts = ev_file.name.replace("_events.tsv", "").split("_")
+        ev_name = ev_file.name.replace("_events.tsv", "").replace("events.tsv", "").replace("_events.csv", "").replace("events.csv", "")
+        if ev_name.endswith("_"): ev_name = ev_name[:-1]
+        
+        parts = ev_name.split("_")
         
         sub_id = None
         ses_id = "ses-01"
@@ -69,7 +75,13 @@ def parse_bids_dataset(dataset_name: str, root_path: str):
             elif p.startswith("run-"): run = p.split("-", 1)[1]
             
         if not sub_id:
-            continue
+            # Fallback if filename lacks sub-, try to get it from parent directory name
+            if "sub-" in ev_file.parent.name:
+                sub_id = ev_file.parent.name
+            elif "sub-" in ev_file.parent.parent.name:
+                sub_id = ev_file.parent.parent.name
+            else:
+                continue
             
         session_uid = f"{dataset_name}_{sub_id}_{ses_id}"
         
@@ -82,10 +94,12 @@ def parse_bids_dataset(dataset_name: str, root_path: str):
         
         # 3. Find matching EEG file
         eeg_dir = ev_file.parent
-        base_name = ev_file.name.replace("_events.tsv", "")
-        # Common BIDS extensions: .set, .vhdr, .edf, .bdf, .fif
-        eeg_files = list(eeg_dir.glob(f"{base_name}_eeg.*"))
-        eeg_files = [f for f in eeg_files if f.suffix not in ['.json', '.tsv']]
+        # Look for any eeg file with a similar base name
+        eeg_files = list(eeg_dir.glob(f"{ev_name}*eeg.*"))
+        if not eeg_files:
+            eeg_files = list(eeg_dir.glob("*eeg.*")) # Fallback
+            
+        eeg_files = [f for f in eeg_files if f.suffix.lower() not in ['.json', '.tsv', '.csv', '.txt']]
         eeg_path = str(eeg_files[0].resolve()) if eeg_files else ""
         
         # 4. Parse the events
