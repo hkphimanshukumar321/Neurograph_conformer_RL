@@ -1,0 +1,119 @@
+# NeuroGraph Full — complete architecture with all tasks (~25M params)
+
+model:
+  name: neurograph_full
+  type: proposed
+  variant: full
+
+  # Front-end
+  frontend:
+    type: cwt
+    freqs_min: 1
+    freqs_max: 100
+    freqs_step: 1
+    n_cycles_mode: adaptive
+    time_downsample: 4
+    projection_dim: 256
+    # Also compute filter-bank as auxiliary input
+    auxiliary_filterbank: true
+    auxiliary_n_bands: 6
+
+  # Spatial encoder (GATv2)
+  spatial:
+    type: graph
+    n_layers: 2
+    n_heads: 8
+    d_model: 256
+    dropout: 0.1
+    adjacency: hybrid       # α · A_distance + (1-α) · A_correlation
+    hybrid_alpha: 0.5
+    sigma: auto
+    positional_encoding: mni # use MNI coordinates as node positional features
+
+  # Conformer encoder
+  encoder:
+    type: conformer
+    d_model: 256
+    n_layers: 6
+    n_heads: 8
+    d_ff: 1024
+    conv_kernel_size: 31
+    dropout: 0.1
+    attention_dropout: 0.1
+    relative_pos_encoding: true
+    # Macaron-style double feed-forward
+    macaron: true
+
+  # Mamba sequential module (after Conformer)
+  mamba:
+    enabled: true
+    n_layers: 2
+    d_model: 256
+    d_state: 16
+    d_conv: 4
+    expand: 2
+    dropout: 0.1
+
+  # Transformer decoder (for generation)
+  decoder:
+    enabled: true
+    type: transformer
+    d_model: 256
+    n_layers: 4
+    n_heads: 8
+    d_ff: 1024
+    dropout: 0.1
+    max_seq_len: 50
+    # CTC auxiliary
+    ctc_weight: 0.3          # weight for CTC loss branch
+    # Teacher forcing schedule
+    teacher_forcing_start: 1.0
+    teacher_forcing_end: 0.5
+    teacher_forcing_decay_epochs: 50
+
+  # Output heads
+  heads:
+    classification:
+      type: linear
+      dropout: 0.3
+      n_classes: null
+
+    retrieval:
+      type: contrastive
+      d_embed: 256
+      text_encoder: paraphrase-multilingual-MiniLM-L12-v2  # multilingual for Chisco
+      text_encoder_frozen: true
+      temperature: 0.07
+
+    generation:
+      type: autoregressive
+      vocab_size: null       # set per dataset (Chinese chars or English BPE)
+      d_model: 256
+      tied_embeddings: true  # tie decoder input/output embeddings
+
+  # RL fine-tuning configuration (Stage 4)
+  rl:
+    enabled: false           # enabled only in Stage 4
+    method: scst             # "scst", "mwer", "ppo"
+    # SCST
+    scst:
+      n_samples: 5
+    # MWER
+    mwer:
+      n_best: 5
+    # PPO
+    ppo:
+      clip_ratio: 0.2
+      n_epochs: 4
+      mini_batch_size: 8
+    # Reward design
+    reward:
+      semantic_similarity_weight: 0.4
+      wer_weight: 0.2
+      cer_weight: 0.1
+      retrieval_correctness_weight: 0.1
+      fluency_weight: 0.1
+      phoneme_consistency_weight: 0.1
+
+  # Estimated parameters: ~25M
+  estimated_params_M: 25

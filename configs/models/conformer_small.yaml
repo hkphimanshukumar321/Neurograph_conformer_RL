@@ -1,0 +1,49 @@
+# Conformer Small — deployable classification-only variant (~0.5M params)
+
+model:
+  name: conformer_small
+  type: proposed
+  variant: small
+
+  # Front-end
+  frontend:
+    type: filterbank         # lighter than CWT for deployment
+    learnable: true          # SincNet-style learnable filters
+    n_bands: 6
+    output_type: logpower    # log-power features
+
+  # Spatial encoder
+  spatial:
+    type: region_pooling     # simpler than graph for small model
+    n_regions: 9
+    pooling: attention       # attention-weighted pooling
+    d_model: 64
+
+  # Conformer encoder
+  encoder:
+    type: conformer
+    d_model: 64
+    n_layers: 2
+    n_heads: 4
+    d_ff: 256
+    conv_kernel_size: 15     # smaller kernel for fewer params
+    dropout: 0.2
+    attention_dropout: 0.1
+
+  # No Mamba for small model
+  mamba:
+    enabled: false
+
+  # No decoder for small model (classification only)
+  decoder:
+    enabled: false
+
+  # Output heads
+  heads:
+    classification:
+      type: linear
+      dropout: 0.3
+      n_classes: null        # set by dataset
+
+  # Estimated parameters: ~0.5M
+  estimated_params_M: 0.5

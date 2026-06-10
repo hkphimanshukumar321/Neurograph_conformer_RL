@@ -1,0 +1,58 @@
+# KARA ONE dataset configuration
+# 7 phonemes + 4 words, 62 channels, 1000 Hz, English, imagined/vocalized speech
+
+dataset:
+  name: kara_one
+  version: "1.0"
+  source_url: "https://www.cs.toronto.edu/~complingweb/data/karaOne/karaOne.html"
+  language: en
+  cognitive_task: imagined_speech
+  stimulus_modality: visual_auditory
+
+  # Recording parameters
+  original_srate: 1000
+  n_channels_original: 62
+  montage: biosemi64
+  n_subjects: 12
+
+  # Tasks
+  tasks_supported: [T1, T3]
+  label_type: phoneme_word
+  n_classes: 11
+  classes:
+    - /iy/
+    - /uw/
+    - /piy/
+    - /tiy/
+    - /diy/
+    - /m/
+    - /n/
+    - gnaw
+    - knew
+    - pat
+    - pot
+
+  # Semantic grouping (for T3)
+  semantic_categories:
+    vowels: [/iy/, /uw/]
+    consonant_vowel: [/piy/, /tiy/, /diy/]
+    nasals: [/m/, /n/]
+    words: [gnaw, knew, pat, pot]
+
+  # Paths (relative to data_dir)
+  raw_dir: raw/kara_one
+  processed_dir: processed/kara_one
+
+  # Preprocessing overrides
+  preprocessing:
+    notch_freq: 60          # North America (60 Hz powerline)
+    epoch_tmin: 0.0
+    epoch_tmax: 2.0
+
+  # Provider-matched preprocessing (for fair comparison with published results)
+  provider_preprocessing:
+    bandpass_low: 0.1
+    bandpass_high: 100.0
+    notch_freq: 60
+    reference: average
+    artifact_method: ica

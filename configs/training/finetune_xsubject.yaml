@@ -1,0 +1,48 @@
+# Stage 5: Cross-subject / cross-dataset fine-tuning
+
+stage: finetune_xsubject
+description: >
+  Fine-tune pretrained encoder on a new target subject or dataset
+  using few-shot calibration data. Freeze encoder, fine-tune heads.
+
+training:
+  stage: 5
+  batch_size: 16
+  max_epochs: 50
+  lr: 5.0e-4
+  weight_decay: 1.0e-4
+  optimizer: adamw
+  scheduler: cosine_warmup
+  warmup_epochs: 3
+  min_lr: 1.0e-6
+  gradient_clip_val: 1.0
+  early_stopping:
+    enabled: true
+    patience: 15
+    monitor: val_balanced_accuracy
+    mode: max
+
+  # Pretrained checkpoint
+  pretrained:
+    enabled: true
+    checkpoint: null
+    freeze_encoder: true     # freeze encoder, only train head
+    freeze_epochs: null      # keep frozen throughout
+
+  # Few-shot configuration
+  few_shot:
+    enabled: true
+    n_trials_per_class: 10   # calibration trials per class
+    n_shots: [5, 10, 20, 50] # test different amounts
+
+  # Data augmentation (more aggressive for few-shot)
+  augmentations:
+    mixup:
+      enabled: true
+      alpha: 0.4
+    time_shift:
+      enabled: true
+      max_shift_samples: 25
+    gaussian_noise:
+      enabled: true
+      std: 0.2

@@ -1,0 +1,46 @@
+# Deployment / export configuration
+
+deployment:
+  # Export format
+  format: onnx               # "onnx", "torchscript", "both"
+  
+  # Quantization
+  quantize:
+    enabled: true
+    method: dynamic           # "dynamic" (INT8), "static", "none"
+    calibration_samples: 100  # for static quantization
+  
+  # Pruning
+  prune:
+    enabled: false
+    method: magnitude         # "magnitude", "structured"
+    amount: 0.3               # prune 30% of weights
+  
+  # Model variant to export
+  model_variant: small        # "small", "medium", "full"
+  
+  # Input specifications (for ONNX)
+  input_spec:
+    n_channels: 9             # region-pooled
+    n_samples: 500            # 2.0 s @ 250 Hz
+    batch_size: 1             # single-trial inference
+  
+  # Streaming inference
+  streaming:
+    enabled: true
+    window_size_s: 2.0
+    stride_s: 0.5
+    ring_buffer_s: 10.0       # keep last 10 s in buffer
+  
+  # Confidence thresholding
+  confidence:
+    enabled: true
+    threshold: 0.7            # reject predictions below this confidence
+    abstention_label: "uncertain"
+  
+  # Profiling
+  profiling:
+    devices: [cpu, cuda]
+    n_warmup: 10
+    n_runs: 100
+    report_percentiles: [50, 95, 99]

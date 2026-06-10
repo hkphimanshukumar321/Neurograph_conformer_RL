@@ -1,0 +1,65 @@
+# NeuroGraph-Conformer-RL — Requirements
+# Install: pip install -r requirements.txt
+# For dev: pip install -r requirements.txt -e ".[dev]"
+# For deployment: pip install -r requirements.txt -e ".[deploy]"
+
+# ──── Core ML ────
+torch>=2.1.0
+torchvision>=0.16.0
+torchaudio>=2.1.0
+lightning>=2.1.0
+
+# ──── EEG Processing ────
+mne>=1.6.0
+autoreject>=0.4.3
+meegkit>=0.1.7
+
+# ──── Graph Neural Networks ────
+torch-geometric>=2.4.0
+
+# ──── Signal Processing ────
+scipy>=1.11.0
+PyWavelets>=1.5.0
+
+# ──── Data Handling ────
+numpy>=1.24.0
+pandas>=2.1.0
+h5py>=3.10.0
+pyarrow>=14.0.0
+
+# ──── NLP / Text Evaluation ────
+transformers>=4.36.0
+sentence-transformers>=2.3.0
+evaluate>=0.4.0
+jiwer>=3.0.0
+bert-score>=0.3.13
+
+# ──── Config & Experiment Management ────
+omegaconf>=2.3.0
+hydra-core>=1.3.0
+wandb>=0.16.0
+
+# ──── Hyperparameter Optimization ────
+optuna>=3.5.0
+optuna-integration>=3.6.0
+
+# ──── Visualization ────
+matplotlib>=3.8.0
+seaborn>=0.13.0
+plotly>=5.18.0
+
+# ──── ML Utilities ────
+scikit-learn>=1.3.0
+onnx>=1.15.0
+onnxruntime>=1.17.0
+
+# ──── Utilities ────
+tqdm>=4.66.0
+rich>=13.7.0
+click>=8.1.0
+
+# ──── Testing ────
+pytest>=7.4.0
+pytest-cov>=4.1.0
+pytest-timeout>=2.2.0
+pytest-xdist>=3.5.0

@@ -1,0 +1,53 @@
+# Chisco dataset configuration
+# Chinese sentence-level imagined speech, 64 channels, 1000 Hz
+
+dataset:
+  name: chisco
+  version: "1.0"
+  source_url: null  # to be updated with actual source
+  language: zh
+  cognitive_task: imagined_speech
+  stimulus_modality: visual_text
+
+  # Recording parameters
+  original_srate: 1000
+  n_channels_original: 64
+  montage: standard_1020_64
+  n_subjects: 20
+
+  # Tasks
+  tasks_supported: [T3, T4, T5]
+  label_type: sentence
+  n_classes: null  # sentence-level — variable
+
+  # Sentence-level task configuration
+  sentence_config:
+    # T3: Semantic category classification
+    semantic_categories: null  # populated during preprocessing
+    # T4: Retrieval
+    retrieval_pool_sizes: [10, 50, 100]
+    # T5: Generation
+    tokenizer: char  # character-level for Chinese
+    max_seq_len: 50  # max characters per sentence
+
+  # Paths
+  raw_dir: raw/chisco
+  processed_dir: processed/chisco
+
+  # Preprocessing overrides
+  preprocessing:
+    notch_freq: 50            # China (50 Hz powerline)
+    epoch_tmin: 0.0
+    epoch_tmax: 2.0
+    # Sentence-level: use sliding windows for long trials
+    use_sliding_window: true
+    window_size_s: 2.0
+    window_stride_s: 1.0      # 50% overlap
+
+  # Provider-matched preprocessing
+  provider_preprocessing:
+    bandpass_low: 0.1
+    bandpass_high: 100.0
+    notch_freq: 50
+    reference: average
+    artifact_method: ica

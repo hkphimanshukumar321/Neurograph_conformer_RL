@@ -1,0 +1,28 @@
+# EEGNet baseline model configuration (Lawhern et al., 2018)
+
+model:
+  name: eegnet
+  type: baseline
+
+  # Architecture
+  arch:
+    F1: 8             # number of temporal filters
+    F2: 16            # number of pointwise filters
+    D: 2              # depth multiplier for depthwise conv
+    kernel_length: 64 # temporal conv kernel size (at 250 Hz ≈ 256 ms)
+    pool1: 4          # first pooling kernel
+    pool2: 8          # second pooling kernel
+    dropout: 0.5
+    norm: batchnorm   # "batchnorm" or "layernorm"
+
+  # Input
+  input:
+    representation: raw  # raw EEG (C, T)
+    n_channels: null     # set by dataset
+    n_samples: 500       # 2.0 s @ 250 Hz
+
+  # Output heads
+  heads:
+    classification:
+      type: linear
+      n_classes: null    # set by dataset

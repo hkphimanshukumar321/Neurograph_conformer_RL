@@ -1,0 +1,53 @@
+# Stage 2: Dataset-specific supervised classification
+
+stage: train_cls
+description: >
+  Supervised classification training with dataset-specific heads.
+  Supports optional loading of pretrained encoder from Stage 1.
+
+training:
+  stage: 2
+  batch_size: 32
+  max_epochs: 200
+  lr: 1.0e-3
+  weight_decay: 1.0e-4
+  optimizer: adamw
+  scheduler: cosine_warmup
+  warmup_epochs: 10
+  min_lr: 1.0e-6
+  gradient_clip_val: 1.0
+  early_stopping:
+    enabled: true
+    patience: 30
+    monitor: val_balanced_accuracy
+    mode: max
+
+  # Pretrained encoder (optional)
+  pretrained:
+    enabled: false           # set true and provide path
+    checkpoint: null         # path to Stage 1 checkpoint
+    freeze_encoder: false    # if true, only train heads
+    freeze_epochs: 5         # freeze encoder for first N epochs, then unfreeze
+
+  # Loss
+  losses:
+    cross_entropy:
+      enabled: true
+      label_smoothing: 0.1
+      class_weights: balanced  # "balanced", "none", or list of weights
+      weight: 1.0
+    focal:
+      enabled: false
+      gamma: 2.0
+      weight: 1.0
+    contrastive_auxiliary:
+      enabled: true          # auxiliary EEG-EEG contrastive within batch
+      temperature: 0.1
+      weight: 0.3
+
+  # Mixup / CutMix augmentation
+  mixup:
+    enabled: true
+    alpha: 0.2
+  cutmix:
+    enabled: false

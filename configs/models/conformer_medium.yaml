@@ -1,0 +1,68 @@
+# Conformer Medium — research-grade classification + retrieval (~5M params)
+
+model:
+  name: conformer_medium
+  type: proposed
+  variant: medium
+
+  # Front-end
+  frontend:
+    type: cwt               # Morlet wavelet
+    freqs_min: 1
+    freqs_max: 100
+    freqs_step: 1
+    n_cycles_mode: adaptive
+    time_downsample: 4
+    projection_dim: 128     # project F*T' to d_model
+
+  # Spatial encoder
+  spatial:
+    type: graph             # GATv2
+    n_layers: 2
+    n_heads: 4
+    d_model: 128
+    dropout: 0.1
+    adjacency: distance     # "distance", "correlation", "hybrid"
+    sigma: auto             # auto = median inter-electrode distance
+
+  # Conformer encoder
+  encoder:
+    type: conformer
+    d_model: 128
+    n_layers: 4
+    n_heads: 8
+    d_ff: 512
+    conv_kernel_size: 31
+    dropout: 0.15
+    attention_dropout: 0.1
+    relative_pos_encoding: true
+
+  # Mamba (minimal)
+  mamba:
+    enabled: true
+    n_layers: 1
+    d_model: 128
+    d_state: 16
+    d_conv: 4
+    expand: 2
+
+  # Decoder (small, for retrieval alignment)
+  decoder:
+    enabled: false          # retrieval uses encoder output directly
+
+  # Output heads
+  heads:
+    classification:
+      type: linear
+      dropout: 0.3
+      n_classes: null
+
+    retrieval:
+      type: contrastive
+      d_embed: 256          # semantic embedding dimension
+      text_encoder: paraphrase-MiniLM-L6-v2
+      text_encoder_frozen: true
+      temperature: 0.07
+
+  # Estimated parameters: ~5M
+  estimated_params_M: 5

@@ -1,0 +1,88 @@
+# Stage 4: Sequence-level reward optimization (RL fine-tuning)
+
+stage: train_rl
+description: >
+  Fine-tune the generation decoder using sequence-level rewards.
+  SCST (Self-Critical Sequence Training) is the primary method.
+  RL does NOT replace the encoder/decoder — it fine-tunes the generation
+  policy using multi-dimensional rewards. Applied AFTER supervised convergence.
+
+training:
+  stage: 4
+  batch_size: 8              # smaller batch for RL stability
+  max_epochs: 50
+  lr: 1.0e-5                 # much lower LR for RL fine-tuning
+  weight_decay: 1.0e-4
+  optimizer: adamw
+  scheduler: constant_with_warmup
+  warmup_epochs: 2
+  gradient_clip_val: 0.5     # tighter clipping for RL
+  early_stopping:
+    enabled: true
+    patience: 10
+    monitor: val_reward
+    mode: max
+
+  # Pretrained checkpoint (from Stage 3)
+  pretrained:
+    enabled: true
+    checkpoint: null
+    freeze_encoder: true     # freeze encoder during RL, only fine-tune decoder
+
+  # RL method
+  rl:
+    method: scst              # "scst", "mwer", "ppo"
+
+    # SCST configuration
+    scst:
+      n_samples: 5            # number of samples per input
+      baseline: greedy        # "greedy" or "mean"
+
+    # MWER configuration (if method=mwer)
+    mwer:
+      n_best: 5
+      smoothing: 0.01
+
+    # PPO configuration (if method=ppo)
+    ppo:
+      clip_ratio: 0.2
+      n_update_epochs: 4
+      mini_batch_size: 4
+      gae_lambda: 0.95
+      entropy_coeff: 0.01
+
+    # Reward weights
+    reward:
+      semantic_similarity:
+        weight: 0.4
+        encoder: paraphrase-multilingual-MiniLM-L12-v2
+      wer:
+        weight: 0.2
+        invert: true           # reward = 1 - WER
+      cer:
+        weight: 0.1
+        invert: true
+      retrieval_correctness:
+        weight: 0.1
+        pool_size: 50
+      fluency:
+        weight: 0.1
+        lm: null               # use decoder's own perplexity
+      phoneme_consistency:
+        weight: 0.1
+        encoder: null           # optional phoneme encoder
+
+  # Combined loss (supervised + RL)
+  losses:
+    cross_entropy:
+      enabled: true
+      weight: 0.5             # keep some supervised signal
+    rl:
+      enabled: true
+      weight: 0.5             # RL reward signal
+  
+  # Safety: KL divergence constraint to prevent policy collapse
+  kl_constraint:
+    enabled: true
+    target_kl: 0.01
+    coefficient: 0.1

@@ -1,0 +1,68 @@
+# ZuCo dataset configuration
+# Natural sentence reading EEG, 128 channels, 500 Hz, English
+# *** PRETRAINING ONLY — NOT imagined speech ***
+
+dataset:
+  name: zuco
+  version: "2.0"  # ZuCo 1.0 + 2.0 combined
+  source_url: "https://osf.io/q3zws/"
+  language: en
+  cognitive_task: natural_reading   # NOT imagined speech
+  stimulus_modality: visual_text
+
+  # Recording parameters
+  original_srate: 500
+  n_channels_original: 128
+  montage: hydrocel_gsn_128
+  n_subjects: 30  # ZuCo 1.0 (12) + ZuCo 2.0 (18)
+
+  # Tasks
+  tasks_supported: [pretraining]    # T4, T5 via pretrained representations
+  label_type: sentence_text
+  n_classes: null  # not applicable
+
+  # CRITICAL NOTE
+  usage_restriction: >
+    ZuCo is a READING task, not imagined speech. It must be used ONLY for
+    self-supervised EEG-language representation pretraining (Stage 1).
+    Any downstream imagined speech result must be evaluated on KARA ONE,
+    Thinking Out Loud, or Chisco. Never report ZuCo results as imagined
+    speech decoding performance.
+
+  # Pretraining configuration
+  pretraining:
+    contrastive_method: infonce
+    temperature: 0.07
+    text_encoder: paraphrase-MiniLM-L6-v2
+    text_encoder_frozen: true
+    augmentations:
+      - time_shift
+      - channel_dropout
+      - gaussian_noise
+      - frequency_masking
+
+  # Reading-specific configuration
+  reading_config:
+    # Word-level fixation data
+    word_epoch_duration_s: 0.8  # zero-pad individual fixations
+    # Sentence-level: concatenate word fixations
+    sentence_level: true
+
+  # Paths
+  raw_dir: raw/zuco
+  processed_dir: processed/zuco
+
+  # Preprocessing overrides
+  preprocessing:
+    notch_freq: 60            # recorded in Switzerland/US (varies)
+    epoch_tmin: 0.0
+    epoch_tmax: 0.8           # word-level fixation epochs
+    # For sentence-level: variable length (concatenated words)
+
+  # Provider-matched preprocessing
+  provider_preprocessing:
+    bandpass_low: 0.5
+    bandpass_high: 100.0
+    notch_freq: 60
+    reference: average
+    artifact_method: ica

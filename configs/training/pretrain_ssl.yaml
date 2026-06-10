@@ -1,0 +1,56 @@
+# Stage 1: Self-supervised EEG pretraining on ZuCo
+
+stage: pretrain_ssl
+description: >
+  Self-supervised contrastive pretraining. Learn general EEG representations
+  by aligning EEG embeddings with frozen text encoder embeddings (InfoNCE).
+  Also includes EEG-only augmentation contrastive learning (NT-Xent).
+
+training:
+  stage: 1
+  batch_size: 64
+  max_epochs: 100
+  lr: 5.0e-4
+  weight_decay: 1.0e-4
+  optimizer: adamw
+  scheduler: cosine_warmup
+  warmup_epochs: 5
+  min_lr: 1.0e-6
+  gradient_clip_val: 1.0
+  early_stopping:
+    enabled: true
+    patience: 20
+    monitor: val_contrastive_loss
+    mode: min
+
+  # Loss
+  losses:
+    infonce:
+      enabled: true
+      temperature: 0.07
+      weight: 1.0
+    ntxent:
+      enabled: true
+      temperature: 0.5
+      weight: 0.5
+
+  # Augmentations for NT-Xent
+  augmentations:
+    time_shift:
+      enabled: true
+      max_shift_samples: 25  # ±100 ms at 250 Hz
+    channel_dropout:
+      enabled: true
+      p: 0.1
+    gaussian_noise:
+      enabled: true
+      std: 0.1
+    frequency_masking:
+      enabled: true
+      max_bands: 2           # mask up to 2 frequency bands
+
+  # Text encoder (frozen)
+  text_encoder:
+    model: paraphrase-MiniLM-L6-v2
+    frozen: true
+    d_embed: 384

@@ -1,0 +1,58 @@
+# Thinking Out Loud dataset configuration
+# 4 directional commands, 14 channels (Emotiv EPOC), 128 Hz, English, inner speech
+
+dataset:
+  name: thinking_out_loud
+  version: "1.0"
+  source_url: "https://openneuro.org/datasets/ds003626"
+  language: en
+  cognitive_task: inner_speech
+  stimulus_modality: visual_cue
+
+  # Recording parameters
+  original_srate: 128
+  n_channels_original: 14
+  montage: emotiv_epoc
+  n_subjects: 15
+
+  # Tasks
+  tasks_supported: [T2]
+  label_type: command
+  n_classes: 4
+  classes:
+    - up
+    - down
+    - left
+    - right
+
+  # Conditions
+  conditions:
+    - inner_speech    # primary condition
+    - pronounced
+    - visualized
+
+  # Paths
+  raw_dir: raw/thinking_out_loud
+  processed_dir: processed/thinking_out_loud
+
+  # Preprocessing overrides
+  preprocessing:
+    notch_freq: 50          # Europe / Argentina (50 Hz powerline)
+    epoch_tmin: 0.0
+    epoch_tmax: 2.0
+
+  # Emotiv-specific notes
+  hardware_notes:
+    - "Consumer-grade EEG (Emotiv EPOC)"
+    - "No central electrodes (C3/C4/Cz) — sensorimotor information unavailable"
+    - "14 channels only — severe spatial limitation"
+    - "128 Hz sampling — frequency content above 64 Hz is unreliable"
+    - "Built-in hardware filters may affect signal"
+
+  # Provider-matched preprocessing
+  provider_preprocessing:
+    bandpass_low: 1.0
+    bandpass_high: 45.0
+    notch_freq: 50
+    reference: built_in
+    artifact_method: threshold
