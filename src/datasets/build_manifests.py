@@ -35,11 +35,13 @@ def find_dataset_roots(detected_csv: str) -> dict:
                 # Fallback: just use the parent dir if it's deeply nested
                 roots.add(str(p.parent))
         
-        # Consolidate roots (remove subdirectories if a parent is already listed)
-        sorted_roots = sorted(list(roots), key=lambda x: len(x))
+        # Consolidate roots: keep the deepest, most specific roots and discard 
+        # shallow parent directories (like /home/user) that accidentally got matched.
+        sorted_roots = sorted(list(roots), key=lambda x: len(x), reverse=True)
         final_roots = []
         for r in sorted_roots:
-            if not any(r.startswith(fr) and r != fr for fr in final_roots):
+            # If `r` is a shallow parent of an already found deeper root `fr`, skip `r`.
+            if not any(fr.startswith(r) and fr != r for fr in final_roots):
                 final_roots.append(r)
                 
         dataset_roots[dataset] = final_roots
