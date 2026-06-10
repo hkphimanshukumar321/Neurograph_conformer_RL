@@ -17,16 +17,12 @@ from src.preprocessing.channel_harmonization import ChannelHarmonizer
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-def load_trial_raw(row) -> mne.io.BaseRaw:
+def load_continuous_raw(path_str: str, dataset: str) -> mne.io.BaseRaw:
     """
     Loads raw EEG data into an MNE object depending on the dataset.
     """
-    dataset = row["dataset"]
-    # Handle column naming variations
-    path_str = row.get("eeg_path") if pd.notna(row.get("eeg_path")) else row.get("source_file")
-    
     if not path_str or pd.isna(path_str):
-        raise ValueError(f"No valid file path found in manifest for trial {row['trial_id']}")
+        raise ValueError("No valid file path found in manifest")
         
     path = Path(str(path_str))
     if not path.exists():
@@ -71,51 +67,71 @@ def main():
     
     success_count = 0
     fail_count = 0
+    skip_count = 0
     
-    for idx, row in tqdm(df.iterrows(), total=len(df), desc="Caching trials"):
-        dataset = row["dataset"]
-        trial_id = row["trial_id"]
-        
+    source_col = "eeg_path" if "eeg_path" in df.columns else "source_file"
+    grouped = df.groupby(source_col)
+    
+    logger.info(f"Grouped 5898 trials into {len(grouped)} unique continuous recording files.")
+    
+    for source_file, group in tqdm(grouped, desc="Processing continuous files", total=len(grouped)):
+        dataset = group.iloc[0]["dataset"]
         dataset_out_dir = output_base_dir / dataset
         dataset_out_dir.mkdir(parents=True, exist_ok=True)
         
-        out_file = dataset_out_dir / f"{trial_id}.pt"
-        if out_file.exists():
-            success_count += 1
+        # Check if all trials for this file are already cached
+        all_cached = True
+        for _, row in group.iterrows():
+            if not (dataset_out_dir / f"{row['trial_id']}.pt").exists():
+                all_cached = False
+                break
+                
+        if all_cached:
+            skip_count += len(group)
             continue
             
         try:
-            # 1. Load Raw data
-            raw = load_trial_raw(row)
+            # 1. Load the continuous raw file ONCE into memory
+            raw_continuous = load_continuous_raw(source_file, dataset)
             
-            # 2. Slice to trial boundaries if onset/duration exist
-            onset = float(row.get("onset", 0.0))
-            duration = float(row.get("duration", -1.0))
+            # 2. Filter & Harmonize the entire continuous recording ONCE
+            raw_continuous = eeg_filter(raw_continuous)
+            raw_continuous = harmonizer(raw_continuous)
             
-            if duration != -1.0 and duration > 0:
-                # Crop MNE raw object
-                tmax = min(onset + duration, raw.times[-1])
-                raw.crop(tmin=onset, tmax=tmax)
+            # 3. Extract and save all individual trials for this recording
+            for idx, row in group.iterrows():
+                trial_id = row["trial_id"]
+                out_file = dataset_out_dir / f"{trial_id}.pt"
                 
-            # 3. Apply Preprocessing Harmonization
-            raw = eeg_filter(raw)
-            raw = harmonizer(raw)
-            
-            # 4. Convert to Tensor and Save
-            # Shape should be (61, T)
-            tensor_data = torch.tensor(raw.get_data(), dtype=torch.float32)
-            torch.save(tensor_data, out_file)
-            
-            success_count += 1
-            
+                if out_file.exists():
+                    skip_count += 1
+                    continue
+                    
+                # Slice trial bounds
+                onset = float(row.get("onset", row.get("start_sec", 0.0)))
+                duration = float(row.get("duration", -1.0))
+                
+                # We must use copy() to avoid altering the continuous object
+                trial_raw = raw_continuous.copy()
+                
+                if duration != -1.0 and duration > 0:
+                    tmax = min(onset + duration, trial_raw.times[-1])
+                    trial_raw.crop(tmin=onset, tmax=tmax)
+                    
+                # Convert to Tensor and Save (61, T)
+                tensor_data = torch.tensor(trial_raw.get_data(), dtype=torch.float32)
+                torch.save(tensor_data, out_file)
+                
+                success_count += 1
+                
         except NotImplementedError as e:
             logger.debug(str(e))
-            fail_count += 1
+            fail_count += len(group)
         except Exception as e:
-            logger.debug(f"Failed trial {trial_id}: {e}")
-            fail_count += 1
+            logger.error(f"Failed processing file {source_file}: {e}")
+            fail_count += len(group)
             
-    logger.info(f"Finished caching! Success: {success_count}, Failed: {fail_count}")
+    logger.info(f"Finished caching! Success: {success_count}, Skipped: {skip_count}, Failed: {fail_count}")
 
 if __name__ == "__main__":
     main()
