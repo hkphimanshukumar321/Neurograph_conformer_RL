@@ -16,6 +16,10 @@ import torch.nn as nn
 from omegaconf import DictConfig
 
 from src.models.conformer import ConformerEncoder
+from src.models.eeg_lightweight_frontend import (
+    EEGGhostDWASPPCASFrontEnd,
+    NodeAttentionPool,
+)
 from src.models.frontend import FilterBankFrontEnd, WaveletFrontEnd
 from src.models.graph_encoder import GraphSpatialEncoder
 from src.models.heads import ClassificationHead, GenerationHead, RetrievalHead
@@ -76,6 +80,8 @@ class NeuroGraphConformer(nn.Module):
                 n_freqs = frontend_cfg.get("freqs_max", 100)
                 t_out = n_samples // frontend_cfg.get("time_downsample", 4)
                 frontend_out_dim = n_freqs * t_out
+            # Frequency bins available for lightweight frontend
+            self._cwt_n_freqs = frontend_cfg.get("freqs_max", 100) - frontend_cfg.get("freqs_min", 1) + 1
         elif frontend_type == "filterbank":
             self.frontend = FilterBankFrontEnd(
                 n_bands=frontend_cfg.get("n_bands", 6),
@@ -83,10 +89,38 @@ class NeuroGraphConformer(nn.Module):
                 d_out=frontend_cfg.get("d_out", d_model),
             )
             frontend_out_dim = frontend_cfg.get("d_out", d_model)
+            self._cwt_n_freqs = frontend_cfg.get("n_bands", 6)
         else:
             # Raw EEG — use a simple linear projection
             self.frontend = nn.Linear(n_samples, d_model)
             frontend_out_dim = d_model
+            self._cwt_n_freqs = 0
+
+        # ──── 1b. Lightweight EEG Front-End (Ghost-DWASPP-CAS) ────
+        lw_cfg = arch.get("lightweight_frontend", {})
+        self.use_lightweight_frontend = lw_cfg.get("enabled", False)
+
+        if self.use_lightweight_frontend:
+            lw_out = lw_cfg.get("out_features", d_model)
+            self.lightweight_frontend = EEGGhostDWASPPCASFrontEnd(
+                in_freq_bins=self._cwt_n_freqs,
+                hidden_channels=lw_cfg.get("hidden_channels", 64),
+                out_features=lw_out,
+                ghost_ratio=lw_cfg.get("ghost_ratio", 2),
+                dwaspp_dilations=lw_cfg.get("dwaspp_dilations", [1, 2, 4, 8]),
+                dropout=lw_cfg.get("dropout", 0.1),
+                norm=lw_cfg.get("norm", "batchnorm"),
+                activation=lw_cfg.get("activation", "gelu"),
+                use_ghost=lw_cfg.get("use_ghost", True),
+                use_dwaspp=lw_cfg.get("use_dwaspp", True),
+                use_cas=lw_cfg.get("use_cas", True),
+                use_normal_conv=lw_cfg.get("use_normal_conv", False),
+            )
+            # In the lightweight path, graph encoder input dim = lw_out (D)
+            graph_d_in = lw_out
+        else:
+            self.lightweight_frontend = None
+            graph_d_in = frontend_out_dim
 
         # ──── 2. Spatial Encoder ────
         spatial_cfg = arch.get("spatial", {})
@@ -94,7 +128,7 @@ class NeuroGraphConformer(nn.Module):
 
         if spatial_type == "graph":
             self.spatial_encoder = GraphSpatialEncoder(
-                d_in=frontend_out_dim,
+                d_in=graph_d_in,
                 d_model=d_model,
                 n_layers=spatial_cfg.get("n_layers", 2),
                 n_heads=spatial_cfg.get("n_heads", 4),
@@ -103,14 +137,20 @@ class NeuroGraphConformer(nn.Module):
             )
         elif spatial_type == "region_pooling":
             self.spatial_encoder = nn.Sequential(
-                nn.Linear(frontend_out_dim, d_model),
+                nn.Linear(graph_d_in, d_model),
                 nn.LayerNorm(d_model),
                 nn.GELU(),
             )
         else:
-            self.spatial_encoder = nn.Linear(frontend_out_dim, d_model)
+            self.spatial_encoder = nn.Linear(graph_d_in, d_model)
 
         self.spatial_type = spatial_type
+
+        # Node attention pool — used in lightweight path to collapse N → 1
+        if self.use_lightweight_frontend:
+            self.node_pool = NodeAttentionPool(d_model)
+        else:
+            self.node_pool = None
 
         # ──── 3. Conformer Encoder ────
         enc_cfg = arch.get("encoder", {})
@@ -209,9 +249,9 @@ class NeuroGraphConformer(nn.Module):
         Parameters
         ----------
         x : torch.Tensor
-            Raw EEG input, shape (batch, C, T).
+            Raw EEG input, shape (batch, N, T).
         adj : torch.Tensor, optional
-            Adjacency matrix for graph encoder, shape (C, C).
+            Adjacency matrix for graph encoder, shape (N, N).
         mask : torch.Tensor, optional
             Padding mask.
 
@@ -220,18 +260,48 @@ class NeuroGraphConformer(nn.Module):
         torch.Tensor
             Encoder output, shape (batch, L, d_model).
         """
-        # Front-end: (batch, C, T) → (batch, C, d_frontend)
-        x = self.frontend(x)
+        if self.use_lightweight_frontend and self.lightweight_frontend is not None:
+            # ---- Lightweight path: preserves electrodes + time ----
+            # 1. Extract 4D time-frequency tensor: (B, N, F, T')
+            x_tf = self.frontend.extract_time_frequency(x)
+            B, N, F_dim, T_dim = x_tf.shape
 
-        # Spatial encoding
-        if self.spatial_type == "graph" and adj is not None:
-            x = self.spatial_encoder(x, adj)
+            # 2. Electrode-wise local feature extraction: (B, N, D, T')
+            x_local = self.lightweight_frontend(x_tf)
+            D = x_local.shape[2]
+
+            # 3. Rearrange for per-timestep graph encoding:
+            #    (B, N, D, T') → (B, T', N, D) → (B*T', N, D)
+            x_graph_in = x_local.permute(0, 3, 1, 2).contiguous()  # (B, T', N, D)
+            x_graph_in = x_graph_in.reshape(B * T_dim, N, D)
+
+            # 4. Graph spatial encoder at each time step: (B*T', N, D_g)
+            if self.spatial_type == "graph" and adj is not None:
+                x_graph = self.spatial_encoder(x_graph_in, adj)
+            else:
+                x_graph = self.spatial_encoder(x_graph_in)
+
+            D_g = x_graph.shape[-1]
+
+            # 5. Reshape back: (B*T', N, D_g) → (B, T', N, D_g)
+            x_graph = x_graph.reshape(B, T_dim, N, D_g)
+
+            # 6. Node attention pool: (B, T', N, D_g) → (B, T', D_g)
+            x_seq = self.node_pool(x_graph)
+
         else:
-            x = self.spatial_encoder(x)
+            # ---- Original path: unchanged ----
+            # Front-end: (batch, N, T) → (batch, N, d_frontend)
+            x = self.frontend(x)
 
-        # x: (batch, C, d_model) — C serves as sequence length for Conformer
+            # Spatial encoding
+            if self.spatial_type == "graph" and adj is not None:
+                x_seq = self.spatial_encoder(x, adj)
+            else:
+                x_seq = self.spatial_encoder(x)
+
         # Conformer expects (batch, L, d_model)
-        h = self.encoder(x, mask=mask)
+        h = self.encoder(x_seq, mask=mask)
 
         # Optional Mamba refinement
         if self.use_mamba and self.mamba is not None:

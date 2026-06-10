@@ -1,0 +1,7 @@
+arch:
+  lightweight_frontend:
+    enabled: true
+    use_cas: false
+    use_dwaspp: false
+    use_ghost: true
+    use_normal_conv: false

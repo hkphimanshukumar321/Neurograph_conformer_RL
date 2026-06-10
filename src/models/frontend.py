@@ -111,8 +111,8 @@ class WaveletFrontEnd(nn.Module):
             # After CWT: (batch, C, F, T') → flatten F,T' per channel → project
             self.projection = nn.LazyLinear(d_out)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Compute CWT of input EEG.
+    def _compute_cwt_power(self, x: torch.Tensor) -> torch.Tensor:
+        """Compute CWT log-power (internal, shared by forward and extract).
 
         Parameters
         ----------
@@ -122,14 +122,11 @@ class WaveletFrontEnd(nn.Module):
         Returns
         -------
         torch.Tensor
-            Time-frequency representation:
-            - If d_out=0: shape (batch, C, F, T')
-            - If d_out>0: shape (batch, C, d_out)
+            Log-power, shape (batch, C, F, T').
         """
         batch, n_ch, n_time = x.shape
 
         # Reshape: treat each channel independently
-        # (batch * C, 1, T) for conv1d
         x_flat = x.reshape(batch * n_ch, 1, n_time)
 
         # Expand to (batch*C, F, T) by repeating input for each freq
@@ -159,10 +156,46 @@ class WaveletFrontEnd(nn.Module):
             power = power.reshape(batch, n_ch, self.n_freqs, t_out)
 
         # Log-scale for better dynamic range
-        power = torch.log1p(power)
+        return torch.log1p(power)
+
+    def extract_time_frequency(self, x: torch.Tensor) -> torch.Tensor:
+        """Return the 4D time-frequency tensor before any projection.
+
+        Use this when feeding into the lightweight front-end, which needs
+        the full [B, N, F, T'] tensor with electrode identity and temporal
+        axis intact.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Raw EEG, shape (batch, C, T).
+
+        Returns
+        -------
+        torch.Tensor
+            Time-frequency log-power, shape (batch, C, F, T').
+        """
+        return self._compute_cwt_power(x)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Compute CWT of input EEG.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Raw EEG, shape (batch, C, T).
+
+        Returns
+        -------
+        torch.Tensor
+            Time-frequency representation:
+            - If d_out=0: shape (batch, C, F, T')
+            - If d_out>0: shape (batch, C, d_out)
+        """
+        power = self._compute_cwt_power(x)
 
         if self.projection is not None:
-            # Flatten freq and time dims, project per channel
+            batch, n_ch = power.shape[0], power.shape[1]
             power_flat = power.reshape(batch * n_ch, -1)
             projected = self.projection(power_flat)
             return projected.reshape(batch, n_ch, -1)
@@ -254,6 +287,49 @@ class FilterBankFrontEnd(nn.Module):
 
         return torch.cat(filters, dim=0).unsqueeze(1)  # (n_bands, 1, K)
 
+    def _compute_band_power(self, x: torch.Tensor) -> torch.Tensor:
+        """Compute band-filtered log-power (internal, shared).
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Raw EEG, shape (batch, C, T).
+
+        Returns
+        -------
+        torch.Tensor
+            Band-power, shape (batch, C, n_bands, T).
+        """
+        batch, n_ch, n_time = x.shape
+        filters = self._compute_filters()  # (n_bands, 1, K)
+
+        x_flat = x.reshape(batch * n_ch, 1, n_time)  # (B*C, 1, T)
+        padding = self.kernel_size // 2
+
+        # Convolve: (B*C, n_bands, T)
+        filtered = F.conv1d(x_flat, filters, padding=padding)
+        # Log-power: (B*C, n_bands, T)
+        power = torch.log1p(filtered ** 2)
+        # Reshape: (B, C, n_bands, T)
+        return power.reshape(batch, n_ch, self.n_bands, n_time)
+
+    def extract_time_frequency(self, x: torch.Tensor) -> torch.Tensor:
+        """Return the 4D band-power tensor before time pooling.
+
+        Use this when feeding into the lightweight front-end.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Raw EEG, shape (batch, C, T).
+
+        Returns
+        -------
+        torch.Tensor
+            Band-power features, shape (batch, C, n_bands, T).
+        """
+        return self._compute_band_power(x)
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Apply learnable filter bank.
 
@@ -267,21 +343,11 @@ class FilterBankFrontEnd(nn.Module):
         torch.Tensor
             Band-power features, shape (batch, C, n_bands) or (batch, C, d_out).
         """
-        batch, n_ch, n_time = x.shape
-        filters = self._compute_filters()  # (n_bands, 1, K)
-
-        # Apply each filter to each channel
-        x_flat = x.reshape(batch * n_ch, 1, n_time)  # (B*C, 1, T)
-        padding = self.kernel_size // 2
-
-        # Convolve: (B*C, n_bands, T)
-        filtered = F.conv1d(x_flat, filters, padding=padding)
-
-        # Log-power
-        power = torch.log1p(filtered ** 2)
+        power = self._compute_band_power(x)  # (B, C, n_bands, T)
+        batch, n_ch = power.shape[0], power.shape[1]
 
         # Pool over time: (B*C, n_bands)
-        pooled = self.pool(power).squeeze(-1)
+        pooled = self.pool(power.reshape(batch * n_ch, self.n_bands, -1)).squeeze(-1)
 
         # Reshape: (B, C, n_bands)
         pooled = pooled.reshape(batch, n_ch, self.n_bands)

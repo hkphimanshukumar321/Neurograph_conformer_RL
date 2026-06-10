@@ -1,0 +1,57 @@
+# NeuroGraph-Conformer with Ghost-DWASPP-CAS Lightweight Front-End
+# Example config showing all configurable knobs.
+
+arch:
+  frontend:
+    type: cwt
+    freqs_min: 1
+    freqs_max: 50
+    n_cycles_mode: adaptive
+    time_downsample: 4
+    projection_dim: 0          # keep 4D output for lightweight frontend
+
+  lightweight_frontend:
+    enabled: true
+    hidden_channels: 64
+    out_features: 64
+    ghost_ratio: 2
+    dwaspp_dilations: [1, 2, 4, 8]
+    dropout: 0.1
+    norm: batchnorm
+    activation: gelu
+    # Ablation switches — set individual modules to false for IEEE ablations
+    use_ghost: true
+    use_dwaspp: true
+    use_cas: true
+
+  spatial:
+    type: graph
+    n_layers: 2
+    n_heads: 4
+    dropout: 0.1
+    adjacency: distance
+
+  encoder:
+    d_model: 128
+    n_layers: 4
+    n_heads: 8
+    d_ff: 512
+    conv_kernel_size: 31
+    dropout: 0.1
+    attention_dropout: 0.1
+    relative_pos_encoding: true
+    macaron: true
+
+  mamba:
+    enabled: false
+
+  heads:
+    classification:
+      dropout: 0.3
+
+  decoder:
+    n_layers: 2
+    n_heads: 8
+    d_ff: 512
+    dropout: 0.1
+    max_seq_len: 50
