@@ -55,7 +55,16 @@ def parse_bids_dataset(dataset_name: str, root_path: str):
     
     if not events_files:
         logger.warning(f"No events files found in {root_path}! Cannot generate trials.")
-        
+        logger.info("--- REPOSITORY SKELETON DUMP ---")
+        try:
+            all_files = [f for f in root_path.rglob("*") if f.is_file()]
+            for f in all_files[:50]:
+                logger.info(f"  {f.relative_to(root_path)}")
+            if len(all_files) > 50:
+                logger.info(f"  ... and {len(all_files) - 50} more files.")
+        except Exception as e:
+            logger.error(f"Failed to dump skeleton: {e}")
+        logger.info("--------------------------------")
     for ev_file in events_files:
         # e.g. sub-01_ses-01_task-inner_run-01_events.tsv
         ev_name = ev_file.name.replace("_events.tsv", "").replace("events.tsv", "").replace("_events.csv", "").replace("events.csv", "")
