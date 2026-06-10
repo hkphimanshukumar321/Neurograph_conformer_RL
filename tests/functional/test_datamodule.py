@@ -10,11 +10,7 @@ def mock_cached_data(tmp_path):
     manifest_dir = tmp_path / "data" / "processed" / "manifests"
     manifest_dir.mkdir(parents=True)
     
-    trials = [
-        {"dataset": "test_ds", "trial_id": "trial_1"},
-        {"dataset": "test_ds", "trial_id": "trial_2"},
-        {"dataset": "test_ds", "trial_id": "trial_3"},
-    ]
+    trials = [{"dataset": "test_ds", "trial_id": f"trial_{i}"} for i in range(1, 11)]
     df = pd.DataFrame(trials)
     manifest_path = manifest_dir / "trials.csv"
     df.to_csv(manifest_path, index=False)
@@ -24,13 +20,11 @@ def mock_cached_data(tmp_path):
     ds_dir = data_dir / "test_ds"
     ds_dir.mkdir(parents=True)
     
-    # trial_1: length 100
-    torch.save(torch.randn(61, 100), ds_dir / "trial_1.pt")
-    # trial_2: length 250
-    torch.save(torch.randn(61, 250), ds_dir / "trial_2.pt")
-    # trial_3: length 150
-    torch.save(torch.randn(61, 150), ds_dir / "trial_3.pt")
-    
+    # Generate 10 mock tensors of varying lengths
+    lengths = [100, 250, 150, 200, 50, 300, 100, 120, 140, 160]
+    for i, length in enumerate(lengths, 1):
+        torch.save(torch.randn(61, length), ds_dir / f"trial_{i}.pt")
+        
     return manifest_path, data_dir
 
 class TestUnifiedDataModule:
@@ -39,7 +33,7 @@ class TestUnifiedDataModule:
         df = pd.read_csv(manifest_path)
         
         dataset = UnifiedEEGDataset(df, str(data_dir))
-        assert len(dataset) == 3
+        assert len(dataset) == 10
         
         x, label = dataset[0]
         assert x.shape == (61, 100)
@@ -81,9 +75,11 @@ class TestUnifiedDataModule:
         dm = UnifiedDataModule(str(manifest_path), str(data_dir), batch_size=2)
         dm.setup()
         
-        # 3 total samples
-        # 80/10/10 split will usually yield: Train 2, Val 0, Test 1 or similar for tiny datasets
-        assert len(dm.train_dataset) > 0
+        # 10 total samples
+        # 80/10/10 split will yield: Train 8, Val 1, Test 1
+        assert len(dm.train_dataset) == 8
+        assert len(dm.val_dataset) == 1
+        assert len(dm.test_dataset) == 1
         
         train_loader = dm.train_dataloader()
         batch_x, attention_mask, labels = next(iter(train_loader))
