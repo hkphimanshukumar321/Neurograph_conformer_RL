@@ -33,12 +33,12 @@ class GraphBuilder(nn.Module):
             x_node: (B, C, D) node features where C is the number of nodes
             adj: (B, C, C) or (C, C) adjacency matrix
         """
-        B, C, F, T_prime = x_tf.shape
+        B, C, F_bins, T_prime = x_tf.shape
         assert C == self.num_nodes, f"Expected {self.num_nodes} channels/nodes, got {C}"
         
         # Flatten F and T' to create the initial raw node representation
         # (B, C, F * T')
-        x_flat = x_tf.view(B, C, F * T_prime)
+        x_flat = x_tf.view(B, C, F_bins * T_prime)
         
         # Project to D dimension: (B, C, D)
         x_node = self.feature_proj(x_flat)
