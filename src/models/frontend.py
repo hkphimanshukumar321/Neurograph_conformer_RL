@@ -274,7 +274,11 @@ class FilterBankFrontEnd(nn.Module):
         """
         nyquist = self.sfreq / 2.0
         low = torch.clamp(self.low_hz, 0.1, nyquist - 1) / nyquist
-        high = torch.clamp(low + torch.abs(self.band_hz), low + 0.01, 1.0)
+        high = torch.clamp(
+            low + torch.abs(self.band_hz),
+            min=low + 0.01,
+            max=torch.tensor(1.0, device=low.device)
+        )
 
         # Sinc filter: bandpass = lowpass(high) - lowpass(low)
         n = torch.arange(0, self.kernel_size, dtype=torch.float32, device=low.device)

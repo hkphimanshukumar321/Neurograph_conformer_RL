@@ -31,8 +31,7 @@ class TestImportsModels:
 
     def test_import_losses(self):
         from src.models.losses import (
-            FocalLoss, InfoNCELoss, NTXentLoss, TripletLoss,
-            CTCLoss, SCSTLoss, MWERLoss,
+            FocalLoss, InfoNCELoss, NTXentLoss, TripletContrastiveLoss, CTCLoss, SCSTLoss, MWERLoss,
         )
 
     def test_import_neurograph(self):
@@ -69,7 +68,7 @@ class TestImportsPreprocessing:
 
     def test_import_epoching(self):
         from src.preprocessing.epoching import (
-            create_event_epochs, create_sliding_window_epochs,
+            create_epochs, create_sliding_window_epochs,
         )
 
     def test_import_quality(self):

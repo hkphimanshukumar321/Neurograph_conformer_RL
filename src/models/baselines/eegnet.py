@@ -81,7 +81,7 @@ class EEGNet(nn.Module):
         # Classifier
         self.classifier = nn.Linear(flat_size, n_classes)
 
-    def forward(self, x: torch.Tensor) -> dict[str, torch.Tensor]:
+    def forward(self, x: torch.Tensor, **kwargs) -> dict[str, torch.Tensor]:
         """Forward pass.
 
         Parameters
