@@ -19,31 +19,77 @@ def parse_zuco(root_path: str):
     sessions = []
     trials = []
     
+    # Look for all .mat files
     mat_files = list(root_path.rglob("*.mat"))
+    
+    if not mat_files:
+        logger.warning(f"No .mat files found in {root_path}!")
+        # Dump skeleton so we can see what IS there
+        logger.info("--- ZuCo SKELETON DUMP ---")
+        try:
+            all_files = [f for f in root_path.rglob("*") if f.is_file()]
+            for f in all_files[:50]:
+                logger.info(f"  {f.relative_to(root_path)}")
+            if len(all_files) > 50:
+                logger.info(f"  ... and {len(all_files) - 50} more files.")
+            elif len(all_files) == 0:
+                logger.info("  (empty directory)")
+        except Exception as e:
+            logger.error(f"Failed to dump skeleton: {e}")
+        logger.info("--------------------------")
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+    
+    logger.info(f"  Found {len(mat_files)} .mat files")
     
     for mat_file in mat_files:
         name_lower = mat_file.name.lower()
-        if "task1" not in name_lower and "task2" not in name_lower and "task3" not in name_lower and "nr" not in name_lower and "tsr" not in name_lower:
-            continue
-            
-        # Try to guess task and subject from filename. e.g. task1-SR-ZAB.mat or resultsZAB_NR.mat
-        task = "unknown"
-        if "task1" in name_lower or "sr" in name_lower: task = "SR"
-        if "task2" in name_lower or "nr" in name_lower: task = "NR"
-        if "task3" in name_lower or "tsr" in name_lower: task = "TSR"
+        stem = mat_file.stem
         
-        # ZuCo subject IDs are typically 3 uppercase letters starting with Z (e.g. ZAB, ZPH)
+        # --- Determine task ---
+        task = "unknown"
+        # ZuCo 1.0 naming: resultsXXX_task1.mat, resultsXXX_task2.mat, resultsXXX_task3.mat
+        # ZuCo 2.0 naming: resultsXXX_NR.mat, resultsXXX_TSR.mat
+        # Also possible: task1-SR-ZAB.mat
+        if "task1" in name_lower or "_sr" in name_lower or "-sr" in name_lower:
+            task = "SR"
+        elif "task2" in name_lower:
+            task = "task2"
+        elif "task3" in name_lower:
+            task = "task3"
+        elif "nr" in name_lower:
+            task = "NR"
+        elif "tsr" in name_lower:
+            task = "TSR"
+        # If we can't determine the task, just accept the file with "unknown" task
+        
+        # --- Determine subject ID ---
+        # ZuCo subject IDs: 3 uppercase letters starting with Z (ZAB, ZPH, ZDM, etc.)
         sub_id = "unknown"
-        for part in mat_file.stem.split("_"):
-            for p2 in part.split("-"):
-                if len(p2) == 3 and p2.startswith("Z") and p2.isupper():
-                    sub_id = p2
-                    
-        # If we couldn't find a subject ID, try looking at the parent folder
-        if sub_id == "unknown" and len(mat_file.parent.name) == 3 and mat_file.parent.name.startswith("Z"):
-            sub_id = mat_file.parent.name
-            
+        # Try splitting on common delimiters
+        for part in stem.replace("-", "_").split("_"):
+            if len(part) == 3 and part[0].isupper() and part.isupper():
+                sub_id = part
+                break
+        
+        # Fallback: try to find a 3-letter uppercase sequence anywhere in the stem
+        if sub_id == "unknown":
+            import re
+            matches = re.findall(r'[A-Z]{3}', stem)
+            if matches:
+                sub_id = matches[0]
+                
+        # Fallback: parent folder name
+        if sub_id == "unknown":
+            parent = mat_file.parent.name
+            if len(parent) >= 2 and parent[0].isupper():
+                sub_id = parent
+                
+        # Last resort: use filename as subject
+        if sub_id == "unknown":
+            sub_id = stem[:10]
+        
         session_uid = f"zuco_{sub_id}_{task}"
+        trial_id = f"zuco_{sub_id}_{task}_{mat_file.name}"
         
         subjects.append({
             "subject_id": sub_id,
@@ -60,7 +106,7 @@ def parse_zuco(root_path: str):
         })
         
         trials.append({
-            "trial_id": f"{session_uid}_full",
+            "trial_id": trial_id,
             "subject_id": sub_id,
             "session_id": session_uid,
             "dataset": "zuco",
