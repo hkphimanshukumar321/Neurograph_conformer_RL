@@ -23,7 +23,19 @@ def main():
     files = list(karaone_dir.rglob("*.mat")) + list(karaone_dir.rglob("*.edf"))
     
     if not files:
+        all_files = list(karaone_dir.rglob("*.*"))
         print(f"[ERROR] No .mat or .edf files found in {karaone_dir}")
+        if all_files:
+            print(f"However, we found {len(all_files)} other files.")
+            print("Here are the first 10 files we found:")
+            for f in all_files[:10]:
+                print(f"  - {f.name}")
+            
+            # Print unique extensions
+            exts = set(f.suffix for f in all_files if f.suffix)
+            print(f"\nUnique file extensions in this folder: {exts}")
+        else:
+            print(f"The folder {karaone_dir} is completely empty!")
         return
         
     df = pd.read_csv(manifest_path)
