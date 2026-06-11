@@ -134,7 +134,9 @@ class Trainer:
         correct = 0
         total = 0
 
-        for batch_idx, batch in enumerate(self.train_loader):
+        from tqdm import tqdm
+        pbar = tqdm(self.train_loader, desc=f"Epoch {getattr(self, 'current_epoch', 0)+1} Train", leave=False)
+        for batch_idx, batch in enumerate(pbar):
             eeg = batch["eeg"].to(self.device)
             labels = batch["label"].to(self.device)
 
@@ -180,7 +182,9 @@ class Trainer:
         all_preds = []
         all_labels = []
 
-        for batch in self.val_loader:
+        from tqdm import tqdm
+        pbar = tqdm(self.val_loader, desc=f"Epoch {getattr(self, 'current_epoch', 0)+1} Val", leave=False)
+        for batch in pbar:
             eeg = batch["eeg"].to(self.device)
             labels = batch["label"].to(self.device)
 
