@@ -90,6 +90,50 @@ def main():
             skip_count += len(group)
             continue
             
+        # --- FIX 1: ZUCO .mat DATASET HANDLING ---
+        if dataset == "zuco":
+            try:
+                import h5py
+                with h5py.File(source_file, 'r') as f:
+                    if 'sentenceData' not in f:
+                        raise ValueError(f"ZuCo file {source_file} missing 'sentenceData' struct")
+                    
+                    sentence_data = f['sentenceData']
+                    
+                    for idx_in_group, (idx, row) in enumerate(group.iterrows()):
+                        trial_id = row["trial_id"]
+                        out_file = dataset_out_dir / f"{trial_id}.pt"
+                        
+                        if out_file.exists():
+                            skip_count += 1
+                            continue
+                            
+                        try:
+                            # ZuCo v7.3 mat uses object references
+                            # 'rawData' contains the raw EEG time series
+                            # If 'rawData' is missing, fallback to 'mean_t1' (theta 1 band)
+                            field_to_extract = 'rawData' if 'rawData' in sentence_data else list(sentence_data.keys())[0]
+                            
+                            ref = sentence_data[field_to_extract][idx_in_group, 0]
+                            eeg_data = np.array(f[ref])
+                            
+                            # Ensure shape is (Channels, Time)
+                            if eeg_data.shape[0] > eeg_data.shape[1]:
+                                eeg_data = eeg_data.T
+                                
+                            tensor_data = torch.tensor(eeg_data, dtype=torch.float32)
+                            torch.save(tensor_data, out_file)
+                            success_count += 1
+                            
+                        except Exception as e:
+                            logger.error(f"Failed extracting ZuCo trial {trial_id}: {e}")
+                            fail_count += 1
+                            
+            except Exception as e:
+                logger.error(f"Failed processing ZuCo file {source_file}: {e}")
+                fail_count += len(group)
+            continue
+
         try:
             # 1. Load the continuous raw file ONCE into memory
             raw_continuous = load_continuous_raw(source_file, dataset)
@@ -110,6 +154,24 @@ def main():
                 # Slice trial bounds
                 onset = float(row.get("onset", row.get("start_sec", 0.0)))
                 duration = float(row.get("duration", -1.0))
+                
+                # --- FIX 2: THINKING OUT LOUD TIMESTAMP OFFSET ---
+                if dataset == "thinking_out_loud" and onset > raw_continuous.times[-1]:
+                    # The trials.csv contains absolute Unix time. We must read the relative 
+                    # onset from the BIDS _events.tsv file located next to the .bdf
+                    bdf_path = Path(source_file)
+                    events_path = bdf_path.parent / bdf_path.name.replace("_eeg.bdf", "_events.tsv")
+                    
+                    if events_path.exists():
+                        events_df = pd.read_csv(events_path, sep="\t")
+                        idx_in_group = group.index.get_loc(idx)
+                        if idx_in_group < len(events_df):
+                            onset = float(events_df.iloc[idx_in_group]["onset"])
+                            dur_val = events_df.iloc[idx_in_group].get("duration")
+                            if pd.notna(dur_val):
+                                duration = float(dur_val)
+                    else:
+                        logger.warning(f"Could not find events file for {source_file} to fix onset.")
                 
                 # We must use copy() to avoid altering the continuous object
                 trial_raw = raw_continuous.copy()
