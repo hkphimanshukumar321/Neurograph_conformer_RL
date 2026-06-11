@@ -30,7 +30,10 @@ echo ""
 echo "[STEP 3/4] Parallel Preprocessing & Caching..."
 echo "This step uses joblib multiprocessing to process all datasets concurrently."
 echo "An automatic CPU OOM guardrail limits max workers to (CPU_CORES / 2)."
-python scripts/03_preprocess_and_cache.py --target_sfreq 250.0 --jobs -1
+nohup python scripts/03_preprocess_and_cache.py --target_sfreq 250.0 --jobs -1 > master_preprocessing.log 2>&1 &
+PREP_PID=$!
+echo "Preprocessing running in background (PID: $PREP_PID). Logs saved to master_preprocessing.log..."
+wait $PREP_PID
 echo ""
 
 echo "[STEP 4/4] Sequential Training..."
@@ -43,8 +46,11 @@ for DATASET in chisco zuco thinking_out_loud; do
     echo "  Starting Training: $DATASET"
     echo "----------------------------------------------------"
     
-    # Run in foreground to block the loop until finished
-    bash scripts/04_train.sh "$DATASET" "$EXPERIMENT_NAME" foreground
+    # Run via nohup but wait for it to finish before starting the next
+    nohup bash scripts/04_train.sh "$DATASET" "$EXPERIMENT_NAME" foreground > "master_training_$DATASET.log" 2>&1 &
+    TRAIN_PID=$!
+    echo "Training $DATASET running in background (PID: $TRAIN_PID). Logs saved to master_training_$DATASET.log. Waiting to finish..."
+    wait $TRAIN_PID
     
     echo "Finished training $DATASET!"
 done
