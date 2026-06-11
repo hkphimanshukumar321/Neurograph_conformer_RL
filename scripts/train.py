@@ -74,7 +74,7 @@ def main():
 
     from src.datasets.factory import get_dataset
     from torch.utils.data import DataLoader
-    from src.models.baselines import build_baseline
+    from src.models.baselines import BASELINE_REGISTRY
     from src.models.architectures.conformer import NeuroGraphConformer
     from src.training.trainer import RLTrainer
     import torch
@@ -109,8 +109,8 @@ def main():
     # Update config with the number of classes from dataset
     cfg.model.n_classes = full_dataset.n_classes
 
-    if cfg.model.name in ["eegnet", "deepconvnet", "cnn_lstm", "graph_only", "vanilla_transformer"]:
-        model = build_baseline(cfg.model.name, cfg)
+    if cfg.model.name in BASELINE_REGISTRY:
+        model = BASELINE_REGISTRY[cfg.model.name](cfg.model)
     else:
         model = NeuroGraphConformer(cfg.model)
         
