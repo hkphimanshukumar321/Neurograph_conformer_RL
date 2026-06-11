@@ -77,17 +77,27 @@ def main():
     from src.utils.config import save_config
     save_config(cfg, exp_dir / "config.yaml")
 
+    # ── Compute fixed dimensions from config ──
+    n_channels = cfg.dataset.get("n_channels_original", 64)
+    n_samples = int(cfg.preprocessing.get("target_srate", 250) *
+                    cfg.preprocessing.get("epoch_tmax", 2.0))
+
     # ── Build dataset ──
     from src.datasets.factory import get_dataset
 
-    logger.info(f"Loading {args.dataset} dataset...")
+    logger.info(f"Loading {args.dataset} dataset (n_samples={n_samples})...")
     manifest_path = Path("data/processed/manifests/trials.csv")
 
     if not manifest_path.exists():
         logger.error(f"Manifest not found at {manifest_path}. Run preprocessing first.")
         return
 
-    full_dataset = get_dataset(args.dataset, manifest_path=manifest_path, split="train")
+    full_dataset = get_dataset(
+        args.dataset,
+        manifest_path=manifest_path,
+        split="train",
+        max_samples=n_samples,
+    )
 
     if len(full_dataset) == 0:
         logger.error(f"No samples found for {args.dataset} in {manifest_path}")
@@ -126,9 +136,6 @@ def main():
     logger.info("Building model...")
 
     n_classes = full_dataset.n_classes
-    n_channels = cfg.dataset.get("n_channels_original", 64)
-    n_samples = int(cfg.preprocessing.get("target_srate", 250) *
-                    cfg.preprocessing.get("epoch_tmax", 2.0))
 
     if cfg.model.name in BASELINE_REGISTRY:
         model = BASELINE_REGISTRY[cfg.model.name](cfg.model)

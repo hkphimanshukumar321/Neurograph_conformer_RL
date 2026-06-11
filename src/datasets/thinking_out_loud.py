@@ -14,6 +14,7 @@ class ThinkingOutLoudDataset(ManifestDataset):
         split: str = "train",
         subjects: list[str] | None = None,
         transform: Callable | None = None,
+        max_samples: int = 500,
     ):
         super().__init__(
             manifest_path=manifest_path,
@@ -21,4 +22,5 @@ class ThinkingOutLoudDataset(ManifestDataset):
             split=split,
             subjects=subjects,
             transform=transform,
+            max_samples=max_samples,
         )
