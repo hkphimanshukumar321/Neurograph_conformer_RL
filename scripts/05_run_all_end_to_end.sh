@@ -25,6 +25,7 @@ echo ""
 
 echo "[STEP 2/4] Preparing Unified Metadata (trials.csv)..."
 python scripts/build_manifests.py
+python scripts/fix_trials.py
 echo ""
 
 echo "[STEP 3/4] Parallel Preprocessing & Caching..."
