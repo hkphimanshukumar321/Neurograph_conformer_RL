@@ -199,10 +199,14 @@ class Trainer:
         avg_loss = total_loss / len(all_labels)
         accuracy = (all_preds == all_labels).float().mean().item()
 
-        # Balanced accuracy
+        # Balanced accuracy and F1
+        import warnings
         from sklearn.metrics import balanced_accuracy_score, f1_score
-        balanced_acc = balanced_accuracy_score(all_labels.numpy(), all_preds.numpy())
-        macro_f1 = f1_score(all_labels.numpy(), all_preds.numpy(), average="macro", zero_division=0)
+        
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            balanced_acc = balanced_accuracy_score(all_labels.numpy(), all_preds.numpy())
+            macro_f1 = f1_score(all_labels.numpy(), all_preds.numpy(), average="macro", zero_division=0)
 
         # Store raw predictions for confusion matrix generation
         self._last_val_preds = all_preds.numpy()
