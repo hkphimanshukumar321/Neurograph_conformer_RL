@@ -4,10 +4,12 @@
 
 Implement in this order:
 1. `scripts/00_make_project_tree.sh`
-2. `scripts/01_download_kara_zuco.sh`
-3. `scripts/02_scan_server_datasets.sh`
-4. `scripts/03_prepare_common_ground.sh`
-5. `src/preprocessing/io_loaders.py`
+2. `scripts/01_scan_datasets.sh`
+3. `scripts/02_prepare_metadata.sh`
+4. `scripts/03_preprocess_and_cache.py` (Multiprocessing CPU)
+5. `scripts/04_train.sh`
+6. `scripts/05_run_all_end_to_end.sh` (Master)
+7. `src/preprocessing/io_loaders.py`
 6. `src/preprocessing/filters.py`
 7. `src/preprocessing/channel_harmonization.py`
 8. `src/features/wavelet.py`
@@ -82,18 +84,7 @@ Your experiments must include these, otherwise the work will look over-engineere
 bash scripts/00_make_project_tree.sh /path/to/eeg-speech-decoding
 cd /path/to/eeg-speech-decoding
 
-# 2. Download KARA ONE and prepare ZuCo repo
-bash scripts/01_download_kara_zuco.sh data/raw data/external
-
-# 3. Optional full ZuCo download
-DOWNLOAD_ZUCO_FULL=1 bash scripts/01_download_kara_zuco.sh data/raw data/external
-
-# 4. Scan server for already existing large datasets
-PROJECT_ROOT=$PWD \
-SEARCH_ROOTS="/data:/scratch:/mnt:/home/$USER" \
-MAX_DEPTH=7 \
-bash scripts/02_scan_server_datasets.sh
-
-# 5. Create common-ground metadata templates
-PROJECT_ROOT=$PWD bash scripts/03_prepare_common_ground.sh
+# 2. End-to-End Execution
+# This automatically handles scanning, metadata, parallel caching, and sequential training.
+bash scripts/05_run_all_end_to_end.sh
 ```
