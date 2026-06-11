@@ -24,9 +24,7 @@ bash scripts/01_scan_datasets.sh
 echo ""
 
 echo "[STEP 2/4] Preparing Unified Metadata (trials.csv)..."
-# WARNING: We comment this out because 02_prepare_metadata.sh generates blank templates!
-# You must use your custom python loaders to populate trials.csv instead.
-# bash scripts/02_prepare_metadata.sh
+python scripts/build_manifests.py
 echo ""
 
 echo "[STEP 3/4] Parallel Preprocessing & Caching..."
