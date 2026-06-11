@@ -25,6 +25,10 @@ def build_manifests(project_root="."):
             dataset = data["dataset"]
             filepath = Path(data["path"])
             
+            # Skip non-EEG file types that might have been picked up in the scan (e.g. .yaml, .pt, .json)
+            if filepath.suffix.lower() not in ['.edf', '.bdf', '.vhdr', '.mat']:
+                continue
+            
             # 1. Chisco Dataset (1 file = 1 trial)
             if dataset == "chisco":
                 trial_id = filepath.stem
