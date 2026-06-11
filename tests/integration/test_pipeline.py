@@ -29,9 +29,9 @@ class TestConfigToModel:
     def test_config_loads_and_merges(self):
         from src.utils.config import load_config, merge_configs
         base = load_config("configs/base.yaml")
-        ds = load_config("configs/datasets/kara_one.yaml")
+        ds = load_config("configs/datasets/thinking_out_loud.yaml")
         merged = merge_configs(base, ds)
-        assert merged.dataset.name == "kara_one"
+        assert merged.dataset.name == "thinking_out_loud"
         assert merged.preprocessing.target_srate == 250
 
     def test_model_forward_from_raw_eeg(self):

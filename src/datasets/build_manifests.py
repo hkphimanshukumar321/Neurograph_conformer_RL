@@ -5,7 +5,6 @@ from pathlib import Path
 
 from src.datasets.chisco import parse_chisco
 from src.datasets.thinking_out_loud import parse_thinking_out_loud
-from src.datasets.karaone import parse_karaone
 from src.datasets.zuco import parse_zuco
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
@@ -33,8 +32,8 @@ def find_dataset_roots(detected_csv: str) -> dict:
                     roots.add(str(Path(*p.parts[:sub_idx])))
                 # Ignored: random files matching the keyword but not in BIDS structure
             else:
-                # For ZuCo and KaraOne, we find the part of the path named 'zuco' or 'karaone'
-                target_name = "zuco" if dataset == "zuco" else "karaone"
+                # For ZuCo, we find the part of the path named 'zuco'
+                target_name = "zuco"
                 found_match = False
                 for i, part in enumerate(p.parts):
                     if target_name in part.lower():
@@ -85,7 +84,6 @@ def main():
     parsers = {
         "chisco": parse_chisco,
         "thinking_out_loud": parse_thinking_out_loud,
-        "karaone": parse_karaone,
         "zuco": parse_zuco
     }
     

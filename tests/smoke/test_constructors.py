@@ -141,6 +141,6 @@ class TestConstructConfig:
 
     def test_load_dataset_configs(self):
         from src.utils.config import load_config
-        for name in ["kara_one", "thinking_out_loud", "chisco", "zuco"]:
+        for name in ["thinking_out_loud", "chisco", "zuco"]:
             cfg = load_config(f"configs/datasets/{name}.yaml")
             assert cfg.dataset.name == name

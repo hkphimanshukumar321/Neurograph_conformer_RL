@@ -5,7 +5,7 @@ PROJECT_ROOT="${PROJECT_ROOT:-$PWD}"
 META_DIR="$PROJECT_ROOT/data/processed/manifests"
 COMMON_DIR="$PROJECT_ROOT/data/processed/common_250hz"
 
-mkdir -p "$META_DIR" "$COMMON_DIR"/{karaone,zuco,thinking_out_loud,chisco}
+mkdir -p "$META_DIR" "$COMMON_DIR"/{zuco,thinking_out_loud,chisco}
 
 cat > "$META_DIR/subjects.tsv" <<'TSV'
 dataset	subject_id	session_id	original_subject_id	notes
@@ -25,11 +25,7 @@ CSV
 
 cat > "$META_DIR/label_map.json" <<'JSON'
 {
-  "karaone": {
-    "task": "phoneme_word_imagined_vocalized",
-    "labels": ["iy", "uw", "piy", "tiy", "diy", "m", "n", "pat", "pot", "knew", "gnaw"],
-    "heads": ["phoneme_classification", "word_classification", "phonological_feature_classification"]
-  },
+
   "zuco": {
     "task": "natural_reading_language_pretraining",
     "labels": ["sentence_text", "word_fixation", "reading_task"],

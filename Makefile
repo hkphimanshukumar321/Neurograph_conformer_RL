@@ -24,7 +24,7 @@ scan:  ## Scan raw datasets and generate manifests
 	$(PYTHON) scripts/scan_datasets.py --data-dir data/raw --output data/manifests
 
 preprocess:  ## Run unified preprocessing on all datasets
-	$(PYTHON) scripts/preprocess.py --config configs/datasets/kara_one.yaml --pipeline unified
+	$(PYTHON) scripts/preprocess.py --config configs/datasets/thinking_out_loud.yaml --pipeline unified
 	$(PYTHON) scripts/preprocess.py --config configs/datasets/thinking_out_loud.yaml --pipeline unified
 	$(PYTHON) scripts/preprocess.py --config configs/datasets/chisco.yaml --pipeline unified
 	$(PYTHON) scripts/preprocess.py --config configs/datasets/zuco.yaml --pipeline unified
@@ -35,13 +35,15 @@ splits:  ## Build train/val/test splits
 
 # ──── Training ────
 
-train-baseline:  ## Train EEGNet baseline on KARA ONE (within-subject)
-	$(PYTHON) scripts/train.py --config configs/models/eegnet.yaml \
-		--dataset kara_one --protocol within_subject --experiment E1_baseline
+train-baseline:  ## Train EEGNet baseline on Thinking Out Loud (within-subject)
+	$(PYTHON) scripts/train.py \
+		--config configs/models/baselines/eegnet.yaml \
+		--dataset thinking_out_loud --protocol within_subject --experiment E1_baseline
 
-train-proposed:  ## Train proposed Conformer model on KARA ONE (LOSO)
-	$(PYTHON) scripts/train.py --config configs/models/conformer_medium.yaml \
-		--dataset kara_one --protocol loso --experiment E1_proposed
+train-proposed:  ## Train proposed Conformer model on Thinking Out Loud (LOSO)
+	$(PYTHON) scripts/train.py \
+		--config configs/models/neurograph_full.yaml \
+		--dataset thinking_out_loud --protocol loso --experiment E1_proposed
 
 pretrain:  ## Stage 1: Self-supervised pretraining on ZuCo
 	$(PYTHON) scripts/train.py --config configs/training/pretrain_ssl.yaml \
@@ -59,11 +61,11 @@ train-rl:  ## Stage 4: RL fine-tuning on Chisco
 
 evaluate:  ## Evaluate best checkpoint
 	$(PYTHON) scripts/evaluate.py --checkpoint results/checkpoints/best.pt \
-		--dataset kara_one --protocol loso --metrics all
+		--dataset thinking_out_loud --protocol loso --metrics all
 
 ablation:  ## Run full ablation suite
 	$(PYTHON) scripts/run_ablation.py --config configs/training/train_cls.yaml \
-		--dataset kara_one --ablations A1,A2,A3,A4,A5,A6,A7,A8,A9
+		--dataset thinking_out_loud --ablations A1,A2,A3,A4,A5,A6,A7,A8,A9
 
 # ──── Deployment ────
 

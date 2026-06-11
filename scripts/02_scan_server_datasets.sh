@@ -8,7 +8,7 @@ MAX_DEPTH="${MAX_DEPTH:-6}"
 MANIFEST_DIR="$PROJECT_ROOT/data/processed/manifests"
 RAW_DIR="$PROJECT_ROOT/data/raw"
 
-mkdir -p "$MANIFEST_DIR" "$RAW_DIR"/{karaone,zuco,thinking_out_loud,chisco}
+mkdir -p "$MANIFEST_DIR" "$RAW_DIR"/{zuco,thinking_out_loud,chisco}
 
 echo "[INFO] PROJECT_ROOT=$PROJECT_ROOT"
 echo "[INFO] SEARCH_ROOTS=$SEARCH_ROOTS"
@@ -36,22 +36,6 @@ scan_root() {
 
   echo "[INFO] Scanning $root"
 
-  # KARA ONE archives and extracted content
-  find "$root" -maxdepth "$MAX_DEPTH" -type f \( \
-    -name "MM*.tar.bz2" -o \
-    -name "P02.tar.bz2" -o \
-    -name "*.cnt" -o \
-    -name "epoch_inds.mat" -o \
-    -name "ID.txt" -o \
-    -name "ID_p.txt" \
-  \) 2>/dev/null | while read -r p; do
-    case "$(basename "$p")" in
-      MM*.tar.bz2|P02.tar.bz2) add_record "karaone" "archive" "$p" ;;
-      *.cnt) add_record "karaone" "cnt_eeg" "$p" ;;
-      epoch_inds.mat) add_record "karaone" "epoch_indices" "$p" ;;
-      ID.txt|ID_p.txt) add_record "karaone" "prompt_order" "$p" ;;
-    esac
-  done
 
   # ZuCo raw/preprocessed/benchmark files
   find "$root" -maxdepth "$MAX_DEPTH" -type f \( \
@@ -116,7 +100,7 @@ while IFS=',' read -r dataset ftype path size; do
 done < "$CSV"
 
 echo "[INFO] Symlink index created under:"
-echo "  $RAW_DIR/karaone/_linked"
+
 echo "  $RAW_DIR/zuco/_linked"
 echo "  $RAW_DIR/thinking_out_loud/_linked"
 echo "  $RAW_DIR/chisco/_linked"

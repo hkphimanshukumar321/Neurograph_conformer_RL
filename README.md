@@ -55,7 +55,7 @@ Raw EEG → Preprocessing → Time-Frequency → Spatial Graph → Conformer+Mam
 
 | Dataset | Lang | Channels | Classes | Role |
 |---------|------|----------|---------|------|
-| [Kara One](http://www.cs.toronto.edu/~complingweb/data/karaOne/) | EN | 62 | 11 (7 phonemes + 4 words) | Primary benchmark |
+| [Thinking Out Loud](https://openneuro.org/datasets/ds003626) | EN | 10 | Commands/Imagined Speech | Primary benchmark |
 | [Thinking Out Loud](https://openneuro.org/datasets/ds003626) | EN | 14 (EPOC) | 4 directional words | Consumer EEG test |
 | Chisco | ZH | 64 | ~80 characters | Sentence generation |
 | [ZuCo](https://osf.io/q3zws/) | EN | 128 | N/A | **Pretraining only** |
@@ -128,9 +128,9 @@ NeuroGraph-Conformer-RL/
 
 ```bash
 python scripts/preprocess.py \
-    --config configs/datasets/kara_one.yaml \
+    --config configs/datasets/thinking_out_loud.yaml \
     --pipeline unified \
-    --output data/processed/kara_one
+    --output data/processed/thinking_out_loud
 ```
 
 ### 2. Train Classification Model
@@ -138,9 +138,9 @@ python scripts/preprocess.py \
 ```bash
 python scripts/train.py \
     --config configs/models/conformer_medium.yaml \
-    --dataset kara_one \
-    --protocol loso \
-    --experiment E2_classification
+    --dataset thinking_out_loud \
+    --protocol within_subject \
+    --experiment E1_baselinefication
 ```
 
 ### 3. Run Ablation Study

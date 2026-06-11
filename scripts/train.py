@@ -72,37 +72,66 @@ def main():
     from src.utils.config import save_config
     save_config(cfg, exp_dir / "config.yaml")
 
-    # ── Build dataset ──
-    logger.info("Loading dataset...")
-    # TODO: Implement dataset loading based on args.dataset and args.protocol
-    # train_dataset = get_dataset(args.dataset, split="train", cfg=cfg)
-    # val_dataset = get_dataset(args.dataset, split="val", cfg=cfg)
-    # train_loader = DataLoader(train_dataset, batch_size=cfg.training.batch_size, ...)
-    # val_loader = DataLoader(val_dataset, batch_size=cfg.training.batch_size, ...)
+    from src.datasets.factory import get_dataset
+    from torch.utils.data import DataLoader
+    from src.models.baselines import build_baseline
+    from src.models.architectures.conformer import NeuroGraphConformer
+    from src.training.trainer import RLTrainer
+    import torch
+    import json
 
-    logger.info(
-        "Dataset loading not yet implemented. "
-        "Run preprocessing first: python scripts/preprocess.py"
+    # ── Build dataset ──
+    logger.info(f"Loading {args.dataset} dataset...")
+    manifest_path = Path("data/processed/manifests/trials.csv")
+    
+    # We will simulate a split by holding out 20% of the dataset
+    full_dataset = get_dataset(args.dataset, manifest_path=manifest_path, split="train")
+    
+    if len(full_dataset) == 0:
+        logger.error(f"No samples found for {args.dataset} in {manifest_path}")
+        return
+
+    # Split
+    val_size = int(0.2 * len(full_dataset))
+    train_size = len(full_dataset) - val_size
+    train_dataset, val_dataset = torch.utils.data.random_split(
+        full_dataset, [train_size, val_size], 
+        generator=torch.Generator().manual_seed(args.seed)
     )
 
+    train_loader = DataLoader(train_dataset, batch_size=cfg.training.batch_size, shuffle=True, num_workers=4)
+    val_loader = DataLoader(val_dataset, batch_size=cfg.training.batch_size, shuffle=False, num_workers=4)
+
+    logger.info(f"Loaded {train_size} training samples, {val_size} validation samples.")
+
     # ── Build model ──
-    # model = build_model(cfg)
-    # logger.info(f"Model parameters: {sum(p.numel() for p in model.parameters()) / 1e6:.2f}M")
+    logger.info("Building model...")
+    # Update config with the number of classes from dataset
+    cfg.model.n_classes = full_dataset.n_classes
+
+    if cfg.model.name in ["eegnet", "deepconvnet", "cnn_lstm", "graph_only", "vanilla_transformer"]:
+        model = build_baseline(cfg.model.name, cfg)
+    else:
+        model = NeuroGraphConformer(cfg.model)
+        
+    logger.info(f"Model parameters: {sum(p.numel() for p in model.parameters()) / 1e6:.2f}M")
 
     # ── Load pretrained (optional) ──
-    # if args.pretrained:
-    #     checkpoint = torch.load(args.pretrained)
-    #     model.load_state_dict(checkpoint["model_state_dict"], strict=False)
-    #     logger.info(f"Loaded pretrained weights from {args.pretrained}")
+    if args.pretrained:
+        checkpoint = torch.load(args.pretrained)
+        model.load_state_dict(checkpoint["model_state_dict"], strict=False)
+        logger.info(f"Loaded pretrained weights from {args.pretrained}")
 
     # ── Train ──
-    # trainer = Trainer(model, cfg, train_loader, val_loader, device=args.device, experiment_dir=exp_dir)
-    # history = trainer.fit()
+    logger.info("Starting training...")
+    trainer = RLTrainer(model, cfg, train_loader, val_loader, device=args.device, experiment_dir=exp_dir)
+    history = trainer.fit()
 
     # ── Save results ──
-    # save_json(history, exp_dir / "history.json")
+    with open(exp_dir / "history.json", "w") as f:
+        json.dump(history, f, indent=2)
 
-    logger.info("Training script initialized successfully. Implement dataset loading to proceed.")
+    logger.info(f"Training complete. Results saved to {exp_dir}")
 
 
 if __name__ == "__main__":
