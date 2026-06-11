@@ -200,13 +200,19 @@ class Trainer:
         accuracy = (all_preds == all_labels).float().mean().item()
 
         # Balanced accuracy
-        from sklearn.metrics import balanced_accuracy_score
+        from sklearn.metrics import balanced_accuracy_score, f1_score
         balanced_acc = balanced_accuracy_score(all_labels.numpy(), all_preds.numpy())
+        macro_f1 = f1_score(all_labels.numpy(), all_preds.numpy(), average="macro", zero_division=0)
+
+        # Store raw predictions for confusion matrix generation
+        self._last_val_preds = all_preds.numpy()
+        self._last_val_labels = all_labels.numpy()
 
         return {
             "val_loss": avg_loss,
             "val_accuracy": accuracy,
             "val_balanced_accuracy": balanced_acc,
+            "val_macro_f1": macro_f1,
         }
 
     def fit(self) -> dict[str, list]:
@@ -225,7 +231,9 @@ class Trainer:
 
         history = {
             "train_loss": [], "train_accuracy": [],
-            "val_loss": [], "val_accuracy": [], "val_balanced_accuracy": [],
+            "val_loss": [], "val_accuracy": [],
+            "val_balanced_accuracy": [], "val_macro_f1": [],
+            "lr": [], "epoch_time_s": [],
         }
 
         logger.info(f"Starting training: {max_epochs} epochs, patience={patience}")
@@ -244,19 +252,22 @@ class Trainer:
             if self.scheduler is not None:
                 self.scheduler.step()
 
+            elapsed = time.time() - t_start
+            lr = self.optimizer.param_groups[0]["lr"]
+
             # Record history
             for k, v in {**train_metrics, **val_metrics}.items():
                 if k in history:
                     history[k].append(v)
-
-            elapsed = time.time() - t_start
+            history["lr"].append(lr)
+            history["epoch_time_s"].append(elapsed)
 
             # Log
-            lr = self.optimizer.param_groups[0]["lr"]
             logger.info(
                 f"Epoch {epoch+1}/{max_epochs} | "
                 f"loss={train_metrics['train_loss']:.4f} | "
                 f"val_bacc={val_metrics['val_balanced_accuracy']:.4f} | "
+                f"val_f1={val_metrics['val_macro_f1']:.4f} | "
                 f"lr={lr:.2e} | {elapsed:.1f}s"
             )
 
@@ -278,6 +289,16 @@ class Trainer:
 
         # Save final checkpoint
         self._save_checkpoint("last.pt", val_metrics)
+
+        # Save confusion matrix data from last validation
+        import numpy as np
+        if hasattr(self, "_last_val_preds"):
+            np.savez(
+                self.experiment_dir / "val_predictions.npz",
+                preds=self._last_val_preds,
+                labels=self._last_val_labels,
+            )
+            logger.info(f"Saved val predictions to {self.experiment_dir / 'val_predictions.npz'}")
 
         return history
 

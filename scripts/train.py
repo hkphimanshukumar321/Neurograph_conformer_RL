@@ -167,6 +167,34 @@ def main():
     with open(exp_dir / "history.json", "w") as f:
         json.dump(history, f, indent=2)
 
+    # ── Generate plots ──
+    try:
+        from src.evaluation.visualization import plot_training_curves, plot_confusion_matrix
+        import numpy as np
+
+        plot_training_curves(
+            history,
+            title=f"{args.experiment} — Training History",
+            save_path=exp_dir / "training_curves.png",
+        )
+        logger.info(f"Training curves saved to {exp_dir / 'training_curves.png'}")
+
+        # Confusion matrix from saved predictions
+        npz_path = exp_dir / "val_predictions.npz"
+        if npz_path.exists():
+            data = np.load(npz_path)
+            from sklearn.metrics import confusion_matrix as cm_func
+            cm = cm_func(data["labels"], data["preds"])
+            class_names = [str(i) for i in range(cm.shape[0])]
+            plot_confusion_matrix(
+                cm, class_names,
+                title=f"{args.experiment} — Confusion Matrix",
+                save_path=exp_dir / "confusion_matrix.png",
+            )
+            logger.info(f"Confusion matrix saved to {exp_dir / 'confusion_matrix.png'}")
+    except Exception as e:
+        logger.warning(f"Could not generate plots: {e}")
+
     logger.info(f"Training complete. Results saved to {exp_dir}")
 
 
