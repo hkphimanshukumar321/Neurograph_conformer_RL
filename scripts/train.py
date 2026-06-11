@@ -75,7 +75,7 @@ def main():
     from src.datasets.factory import get_dataset
     from torch.utils.data import DataLoader
     from src.models.baselines import BASELINE_REGISTRY
-    from src.models.architectures.conformer import NeuroGraphConformer
+    from src.models.neurograph import NeuroGraphConformer
     from src.training.trainer import RLTrainer
     import torch
     import json
