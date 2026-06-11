@@ -18,6 +18,9 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+# Globally suppress annoying sklearn warnings about unique classes
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
 import torch
 from torch.utils.data import DataLoader
 
