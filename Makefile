@@ -20,14 +20,11 @@ dev:  ## Install package in development mode with dev dependencies
 
 # ──── Data Pipeline ────
 
-scan:  ## Scan raw datasets and generate manifests
-	$(PYTHON) scripts/scan_datasets.py --data-dir data/raw --output data/manifests
+scan:  ## Scan the raw datasets directory and generate index manifest
+	bash scripts/01_scan_datasets.sh
 
 preprocess:  ## Run unified preprocessing on all datasets
-	$(PYTHON) scripts/preprocess.py --config configs/datasets/thinking_out_loud.yaml --pipeline unified
-	$(PYTHON) scripts/preprocess.py --config configs/datasets/thinking_out_loud.yaml --pipeline unified
-	$(PYTHON) scripts/preprocess.py --config configs/datasets/chisco.yaml --pipeline unified
-	$(PYTHON) scripts/preprocess.py --config configs/datasets/zuco.yaml --pipeline unified
+	$(PYTHON) scripts/03_preprocess_and_cache.py --project_root .
 
 splits:  ## Build train/val/test splits
 	$(PYTHON) scripts/build_splits.py --manifest data/manifests/dataset_manifest.json \
@@ -64,7 +61,7 @@ evaluate:  ## Evaluate best checkpoint
 		--dataset thinking_out_loud --protocol loso --metrics all
 
 ablation:  ## Run full ablation suite
-	$(PYTHON) scripts/run_ablation.py --config configs/training/train_cls.yaml \
+	$(PYTHON) scripts/ablation/run_ablation.py --config configs/training/train_cls.yaml \
 		--dataset thinking_out_loud --ablations A1,A2,A3,A4,A5,A6,A7,A8,A9
 
 # ──── Deployment ────

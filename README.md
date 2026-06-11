@@ -122,28 +122,33 @@ NeuroGraph-Conformer-RL/
 └── data/                       # Data directory (not in git)
 ```
 
-## Quick Start
+## Usage
 
-### 1. Preprocess Data
-
+### 1. Link Raw Data
+Ensure your downloaded data is on the server, then run the scan script:
 ```bash
-python scripts/preprocess.py \
-    --config configs/datasets/thinking_out_loud.yaml \
-    --pipeline unified \
-    --output data/processed/thinking_out_loud
+bash scripts/01_scan_datasets.sh
 ```
 
-### 2. Train Classification Model
-
+### 2. Prepare Metadata
+Initialize the standard metadata structures:
 ```bash
-python scripts/train.py \
-    --config configs/models/conformer_medium.yaml \
-    --dataset thinking_out_loud \
-    --protocol within_subject \
-    --experiment E1_baselinefication
+bash scripts/02_prepare_metadata.sh
 ```
 
-### 3. Run Ablation Study
+### 3. Preprocess and Cache
+Run the preprocessing pipeline on the linked data to produce `.pt` caches:
+```bash
+python scripts/03_preprocess_and_cache.py --project_root .
+```
+
+### 4. Train Classification Model
+Start the training loop in the background:
+```bash
+bash scripts/04_train.sh chisco First_Run
+```
+
+### 5. Run Ablation Study
 
 ```bash
 python scripts/run_ablation.py \
