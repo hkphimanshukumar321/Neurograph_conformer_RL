@@ -56,9 +56,9 @@ class DeviceManager:
         if dtype == "cuda":
             idx = self.device.index or 0
             name = torch.cuda.get_device_name(idx)
-            mem_total = torch.cuda.get_device_properties(idx).total_mem / (1024**3)
+            mem_total = torch.cuda.get_device_properties(idx).total_memory / (1024**3)
             mem_free = (
-                torch.cuda.get_device_properties(idx).total_mem
+                torch.cuda.get_device_properties(idx).total_memory
                 - torch.cuda.memory_allocated(idx)
             ) / (1024**3)
 
