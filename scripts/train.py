@@ -2,19 +2,24 @@
 train.py — Main training entry point.
 
 Usage:
-    python scripts/train.py --config configs/models/conformer_medium.yaml \
-        --dataset kara_one --protocol loso --experiment E1
+    python scripts/train.py --config configs/models/conformer_small.yaml \
+        --dataset chisco --protocol within_subject --experiment E1
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import sys
+import time
 from pathlib import Path
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import torch
+from torch.utils.data import DataLoader
 
 from src.utils.config import load_config, merge_configs
 from src.utils.logging import setup_logger
@@ -25,7 +30,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="NeuroGraph-Conformer Training")
     parser.add_argument("--config", type=str, required=True, help="Model config YAML")
     parser.add_argument("--dataset", type=str, required=True,
-                        choices=["kara_one", "thinking_out_loud", "chisco", "zuco"],
+                        choices=["thinking_out_loud", "chisco", "zuco"],
                         help="Dataset name")
     parser.add_argument("--protocol", type=str, default="within_subject",
                         choices=["within_subject", "loso", "cross_dataset"],
@@ -72,59 +77,90 @@ def main():
     from src.utils.config import save_config
     save_config(cfg, exp_dir / "config.yaml")
 
-    from src.datasets.factory import get_dataset
-    from torch.utils.data import DataLoader
-    from src.models.baselines import BASELINE_REGISTRY
-    from src.models.neurograph import NeuroGraphConformer
-    from src.training.trainer import RLTrainer
-    import torch
-    import json
-
     # ── Build dataset ──
+    from src.datasets.factory import get_dataset
+
     logger.info(f"Loading {args.dataset} dataset...")
     manifest_path = Path("data/processed/manifests/trials.csv")
-    
-    # We will simulate a split by holding out 20% of the dataset
+
+    if not manifest_path.exists():
+        logger.error(f"Manifest not found at {manifest_path}. Run preprocessing first.")
+        return
+
     full_dataset = get_dataset(args.dataset, manifest_path=manifest_path, split="train")
-    
+
     if len(full_dataset) == 0:
         logger.error(f"No samples found for {args.dataset} in {manifest_path}")
         return
 
-    # Split
+    # Split 80/20
     val_size = int(0.2 * len(full_dataset))
     train_size = len(full_dataset) - val_size
     train_dataset, val_dataset = torch.utils.data.random_split(
-        full_dataset, [train_size, val_size], 
+        full_dataset, [train_size, val_size],
         generator=torch.Generator().manual_seed(args.seed)
     )
 
-    train_loader = DataLoader(train_dataset, batch_size=cfg.training.batch_size, shuffle=True, num_workers=4)
-    val_loader = DataLoader(val_dataset, batch_size=cfg.training.batch_size, shuffle=False, num_workers=4)
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=cfg.training.batch_size,
+        shuffle=True,
+        num_workers=4,
+        pin_memory=True,
+    )
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=cfg.training.batch_size,
+        shuffle=False,
+        num_workers=4,
+        pin_memory=True,
+    )
 
     logger.info(f"Loaded {train_size} training samples, {val_size} validation samples.")
+    logger.info(f"Classes: {full_dataset.n_classes}")
 
     # ── Build model ──
+    from src.models.baselines import BASELINE_REGISTRY
+    from src.models.neurograph import NeuroGraphConformer
+
     logger.info("Building model...")
-    # Update config with the number of classes from dataset
-    cfg.model.n_classes = full_dataset.n_classes
+
+    n_classes = full_dataset.n_classes
+    n_channels = cfg.dataset.get("n_channels_original", 64)
+    n_samples = int(cfg.preprocessing.get("target_srate", 250) *
+                    cfg.preprocessing.get("epoch_tmax", 2.0))
 
     if cfg.model.name in BASELINE_REGISTRY:
         model = BASELINE_REGISTRY[cfg.model.name](cfg.model)
     else:
-        model = NeuroGraphConformer(cfg.model)
-        
-    logger.info(f"Model parameters: {sum(p.numel() for p in model.parameters()) / 1e6:.2f}M")
+        model = NeuroGraphConformer(
+            cfg=cfg.model,
+            n_channels=n_channels,
+            n_samples=n_samples,
+            n_classes=n_classes,
+        )
+
+    total_params = sum(p.numel() for p in model.parameters()) / 1e6
+    logger.info(f"Model parameters: {total_params:.2f}M")
 
     # ── Load pretrained (optional) ──
     if args.pretrained:
-        checkpoint = torch.load(args.pretrained)
+        checkpoint = torch.load(args.pretrained, map_location="cpu")
         model.load_state_dict(checkpoint["model_state_dict"], strict=False)
         logger.info(f"Loaded pretrained weights from {args.pretrained}")
 
     # ── Train ──
+    from src.training.trainer import Trainer
+
     logger.info("Starting training...")
-    trainer = RLTrainer(model, cfg, train_loader, val_loader, device=args.device, experiment_dir=exp_dir)
+    trainer = Trainer(
+        model=model,
+        cfg=cfg,
+        train_loader=train_loader,
+        val_loader=val_loader,
+        device=args.device,
+        experiment_dir=exp_dir,
+    )
     history = trainer.fit()
 
     # ── Save results ──
@@ -136,3 +172,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
