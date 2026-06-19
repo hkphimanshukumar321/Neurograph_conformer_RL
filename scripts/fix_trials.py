@@ -6,7 +6,7 @@ logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
 def fix_trials_csv():
-    project_root = Path(".").resolve()
+    project_root = Path(__file__).resolve().parent.parent
     trials_csv = project_root / "data" / "processed" / "manifests" / "trials.csv"
     
     if not trials_csv.exists():

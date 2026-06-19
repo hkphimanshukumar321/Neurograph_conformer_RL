@@ -89,7 +89,8 @@ def main():
     from src.datasets.factory import get_dataset
 
     logger.info(f"Loading {args.dataset} dataset (n_samples={n_samples})...")
-    manifest_path = Path("data/processed/manifests/trials.csv")
+    project_root = Path(__file__).resolve().parent.parent
+    manifest_path = project_root / "data" / "processed" / "manifests" / "trials.csv"
 
     if not manifest_path.exists():
         logger.error(f"Manifest not found at {manifest_path}. Run preprocessing first.")

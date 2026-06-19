@@ -109,8 +109,11 @@ class ManifestDataset(Dataset):
         if "cache_path" in row.index and pd.notnull(row.get("cache_path")):
             cache_path = Path(row["cache_path"])
         else:
+            # Resolve from manifest location: manifest is at data/processed/manifests/trials.csv
+            # cache is at data/processed/common_250hz/<dataset>/<trial_id>.pt
+            data_processed_dir = self.manifest_path.parent.parent  # data/processed/
             cache_path = (
-                Path("data") / "processed" / "common_250hz"
+                data_processed_dir / "common_250hz"
                 / self.dataset_name / f"{row['trial_id']}.pt"
             )
         

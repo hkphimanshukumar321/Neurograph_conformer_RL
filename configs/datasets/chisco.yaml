@@ -4,7 +4,7 @@
 dataset:
   name: chisco
   version: "1.0"
-  source_url: null  # to be updated with actual source
+  source_url: "https://openneuro.org/datasets/ds005170"
   language: zh
   cognitive_task: imagined_speech
   stimulus_modality: visual_text

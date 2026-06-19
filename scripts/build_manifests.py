@@ -6,7 +6,9 @@ import logging
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-def build_manifests(project_root="."):
+def build_manifests(project_root=None):
+    if project_root is None:
+        project_root = Path(__file__).resolve().parent.parent
     project_root = Path(project_root).resolve()
     jsonl_path = project_root / "data" / "processed" / "manifests" / "detected_files.jsonl"
     out_csv = project_root / "data" / "processed" / "manifests" / "trials.csv"
@@ -26,20 +28,22 @@ def build_manifests(project_root="."):
             filepath = Path(data["path"])
             
             # Skip non-EEG file types that might have been picked up in the scan (e.g. .yaml, .pt, .json)
-            if filepath.suffix.lower() not in ['.edf', '.bdf', '.vhdr', '.mat']:
+            if filepath.suffix.lower() not in ['.edf', '.bdf', '.vhdr', '.mat', '.set']:
                 continue
             
-            # 1. Chisco Dataset (1 file = 1 trial)
+            # 1. Chisco Dataset (1 file = 1 trial for .edf files)
             if dataset == "chisco":
                 trial_id = filepath.stem
                 # Try to parse sub-XX and ses-YY from filename
+                # Chisco BIDS filenames: sub-05_ses-06_task-imagine_run-037_eeg.edf
                 parts = trial_id.split('_')
                 sub = next((p for p in parts if p.startswith("sub-")), "sub-unk")
                 ses = next((p for p in parts if p.startswith("ses-")), "ses-unk")
                 task = next((p for p in parts if p.startswith("task-")), "task-unk").replace("task-", "")
+                run = next((p for p in parts if p.startswith("run-")), "run-unk")
                 
                 rows.append({
-                    "trial_id": f"chisco_{trial_id}",
+                    "trial_id": f"chisco_{sub}_{ses}_{run}",
                     "subject_id": sub,
                     "session_id": f"chisco_{sub}_{ses}",
                     "dataset": "chisco",
@@ -47,7 +51,7 @@ def build_manifests(project_root="."):
                     "eeg_path": str(filepath),
                     "onset": 0.0,
                     "duration": -1.0,
-                    "trial_type": "continuous",
+                    "trial_type": "imagined_speech",
                     "raw_metadata": "{}",
                     "split": "train" # Default to train, user can split later
                 })

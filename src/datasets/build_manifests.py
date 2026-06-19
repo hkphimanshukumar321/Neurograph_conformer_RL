@@ -3,9 +3,7 @@ import logging
 import pandas as pd
 from pathlib import Path
 
-from src.datasets.chisco import parse_chisco
-from src.datasets.thinking_out_loud import parse_thinking_out_loud
-from src.datasets.zuco import parse_zuco
+from src.datasets.bids_loader import parse_bids_dataset
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -82,9 +80,9 @@ def main():
     all_trials = []
     
     parsers = {
-        "chisco": parse_chisco,
-        "thinking_out_loud": parse_thinking_out_loud,
-        "zuco": parse_zuco
+        "chisco": lambda root: parse_bids_dataset("chisco", root),
+        "thinking_out_loud": lambda root: parse_bids_dataset("thinking_out_loud", root),
+        "zuco": lambda root: parse_bids_dataset("zuco", root),
     }
     
     for dataset, roots in dataset_roots.items():

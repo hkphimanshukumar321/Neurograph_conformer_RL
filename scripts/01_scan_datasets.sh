@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROJECT_ROOT="${PROJECT_ROOT:-$PWD}"
-SEARCH_ROOTS="${SEARCH_ROOTS:-$PROJECT_ROOT/data/raw:$PROJECT_ROOT:/mnt:/data:/scratch:/home}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="${PROJECT_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+# Include both data/raw and the versioned download folders that OpenNeuro scripts create
+SEARCH_ROOTS="${SEARCH_ROOTS:-$PROJECT_ROOT/data/raw:$PROJECT_ROOT/ds003626-2.1.2:$PROJECT_ROOT/ds005170-1.1.2:$PROJECT_ROOT/data/external:/mnt:/data:/scratch:/home}"
 MAX_DEPTH="${MAX_DEPTH:-6}"
 
 MANIFEST_DIR="$PROJECT_ROOT/data/processed/manifests"
@@ -57,6 +59,7 @@ scan_root() {
     -iname "*chisco*" -o \
     -iname "*chineseeeg*" -o \
     -iname "*imagined*speech*" -o \
+    -iname "*task-imagine*_eeg.edf" -o \
     -iname "*semantic*.csv" \
   \) 2>/dev/null | while read -r p; do
     add_record "chisco" "candidate" "$p"
