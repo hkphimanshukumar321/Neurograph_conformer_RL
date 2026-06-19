@@ -162,8 +162,21 @@ def main():
 
     # ── Train ──
     from src.training.trainer import Trainer
+    from src.training.wandb_logger import create_wandb_logger
 
     logger.info("Starting training...")
+    
+    # Initialize W&B logger if enabled
+    wb_logger = None
+    if cfg.logging.get("wandb", {}).get("enabled", False):
+        logger.info("Initializing W&B logger...")
+        from src.utils.config import config_to_dict
+        wb_logger = create_wandb_logger(
+            cfg=config_to_dict(cfg),
+            experiment_name=args.experiment,
+            tags=[args.dataset, cfg.model.name]
+        )
+
     trainer = Trainer(
         model=model,
         cfg=cfg,
@@ -171,8 +184,12 @@ def main():
         val_loader=val_loader,
         device=args.device,
         experiment_dir=exp_dir,
+        logger_obj=wb_logger,
     )
     history = trainer.fit()
+    
+    if wb_logger is not None:
+        wb_logger.finish()
 
     # ── Save results ──
     with open(exp_dir / "history.json", "w") as f:

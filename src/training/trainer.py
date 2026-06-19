@@ -47,6 +47,7 @@ class Trainer:
         val_loader: DataLoader,
         device: str = "auto",
         experiment_dir: str | Path = "experiments/default",
+        logger_obj: Any | None = None,
     ):
         self.cfg = cfg
         self.device_mgr = DeviceManager(device)
@@ -57,6 +58,7 @@ class Trainer:
         self.val_loader = val_loader
         self.experiment_dir = Path(experiment_dir)
         self.experiment_dir.mkdir(parents=True, exist_ok=True)
+        self.logger_obj = logger_obj
 
         # Optimizer
         self.optimizer = self._build_optimizer()
@@ -278,6 +280,8 @@ class Trainer:
                 f"val_f1={val_metrics['val_macro_f1']:.4f} | "
                 f"lr={lr:.2e} | {elapsed:.1f}s"
             )
+            if self.logger_obj is not None:
+                self.logger_obj.log_epoch(epoch + 1, train_metrics, val_metrics, lr)
 
             # Early stopping
             current_metric = val_metrics[monitor]

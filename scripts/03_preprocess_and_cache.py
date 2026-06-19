@@ -98,8 +98,10 @@ def process_group(source_file, group, output_base_dir, target_sfreq):
                         torch.save(tensor_data, out_file)
                         success += 1
                     except Exception as e:
+                        logger.error(f"Failed to extract trial {trial_id} from ZuCo file {source_file}: {e}")
                         fail += 1
         except Exception as e:
+            logger.error(f"Failed to process ZuCo file {source_file}: {e}")
             fail += len(group)
         return success, skip, fail
 
@@ -142,9 +144,11 @@ def process_group(source_file, group, output_base_dir, target_sfreq):
             torch.save(tensor_data, out_file)
             success += 1
             
-    except NotImplementedError:
+    except NotImplementedError as e:
+        logger.error(f"Not implemented extension for {source_file}: {e}")
         fail += len(group)
     except Exception as e:
+        logger.error(f"Failed to process {source_file}: {e}")
         fail += len(group)
         
     return success, skip, fail
