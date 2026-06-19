@@ -48,7 +48,7 @@ dependencies = [
     "h5py>=3.10.0",
     "pyarrow>=14.0.0",
     # NLP / text evaluation
-    "transformers>=4.36.0",
+    "transformers>=4.41.0",
     "sentence-transformers>=2.3.0",
     "evaluate>=0.4.0",
     "jiwer>=3.0.0",           # WER/CER
