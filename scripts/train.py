@@ -33,7 +33,6 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="NeuroGraph-Conformer Training")
     parser.add_argument("--config", type=str, required=True, help="Model config YAML")
     parser.add_argument("--dataset", type=str, required=True,
-                        choices=["thinking_out_loud", "chisco", "zuco"],
                         help="Dataset name")
     parser.add_argument("--protocol", type=str, default="within_subject",
                         choices=["within_subject", "loso", "cross_dataset"],
