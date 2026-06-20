@@ -88,7 +88,7 @@ def build_manifests(project_root=None):
                     "subject_id": sub,
                     "session_id": f"chisco_{sub}_{ses}",
                     "dataset": "chisco",
-                    "task": task,
+                    "task": "sentence_level_imagined_speech",
                     "eeg_path": str(filepath),
                     "onset": 0.0,
                     "duration": -1.0,
@@ -110,30 +110,65 @@ def build_manifests(project_root=None):
                 
                 if events_path.exists():
                     try:
-                        events_df = pd.read_csv(events_path, sep='\t')
-                        for idx, ev in events_df.iterrows():
-                            onset = float(ev["onset"])
-                            duration = float(ev.get("duration", -1.0))
-                            trial_type = ev.get("trial_type", "unknown")
+                        if events_path.suffix == '.tsv':
+                            events_df = pd.read_csv(events_path, sep='\t')
+                            for idx, ev in events_df.iterrows():
+                                onset = float(ev["onset"])
+                                duration = float(ev.get("duration", -1.0))
+                                trial_type = ev.get("trial_type", "unknown")
+                                
+                                label_val = ev.get("value", trial_type)
+                                text_str = str(label_val).lower().replace("imagined", "").strip()
+                                
+                                rows.append({
+                                    "trial_id": f"tol_{filepath.stem}_trial{idx:03d}",
+                                    "subject_id": sub,
+                                    "session_id": f"tol_{sub}",
+                                    "dataset": "thinking_out_loud",
+                                    "task": "inner_speech_command_classification",
+                                    "label": label_val,
+                                    "eeg_path": str(filepath),
+                                    "onset": onset,
+                                    "duration": duration,
+                                    "trial_type": trial_type,
+                                    "text": text_str,
+                                    "raw_metadata": "{}",
+                                    "split": "train"
+                                })
+                        else:
+                            # It's a .dat file (pickle)
+                            import pickle
+                            with open(events_path, "rb") as ep:
+                                events = pickle.load(ep)
                             
-                            label_val = ev.get("value", trial_type)
-                            text_str = str(label_val).lower().replace("imagined", "").strip()
-                            
-                            rows.append({
-                                "trial_id": f"tol_{filepath.stem}_trial{idx:03d}",
-                                "subject_id": sub,
-                                "session_id": f"tol_{sub}",
-                                "dataset": "thinking_out_loud",
-                                "task": "inner_speech_command_classification",
-                                "label": label_val,
-                                "eeg_path": str(filepath),
-                                "onset": onset,
-                                "duration": duration,
-                                "trial_type": trial_type,
-                                "text": text_str,
-                                "raw_metadata": "{}",
-                                "split": "train"
-                            })
+                            label_map = {
+                                0: "command_0",
+                                1: "command_1",
+                                2: "command_2",
+                                3: "command_3",
+                            }
+                            for idx, ev in enumerate(events):
+                                onset_sample = int(ev[0])
+                                event_code = int(ev[1])
+                                # For .dat, we don't have exact duration or sfreq easily here, fallback to sfreq=128
+                                sfreq = 128.0
+                                label_val = label_map.get(event_code, f"command_{event_code}")
+                                text_str = label_val.replace("_", " ")
+                                rows.append({
+                                    "trial_id": f"tol_{filepath.stem}_trial{idx:03d}",
+                                    "subject_id": sub,
+                                    "session_id": f"tol_{sub}",
+                                    "dataset": "thinking_out_loud",
+                                    "task": "inner_speech_command_classification",
+                                    "label": label_val,
+                                    "eeg_path": str(filepath),
+                                    "onset": onset_sample / sfreq,
+                                    "duration": 2.0,
+                                    "trial_type": label_val,
+                                    "text": text_str,
+                                    "raw_metadata": "{}",
+                                    "split": "train"
+                                })
                     except Exception as e:
                         logger.error(f"Failed to read events for {filepath}: {e}")
                         rows.append({
