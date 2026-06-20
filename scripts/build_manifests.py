@@ -49,7 +49,7 @@ def build_manifests(project_root=None):
             if filepath.suffix.lower() not in ['.edf', '.bdf', '.vhdr', '.mat', '.set']:
                 continue
             
-            # 1. Chisco Dataset (1 file = 1 trial for .edf files)
+                # 1. Chisco Dataset (1 file = 1 trial for .edf files)
             if dataset == "chisco":
                 resolved_filepath = filepath.resolve()
                 if resolved_filepath in seen_chisco_files:
@@ -61,6 +61,7 @@ def build_manifests(project_root=None):
                 sub = next((p for p in parts if p.startswith("sub-")), "sub-unk")
                 ses = next((p for p in parts if p.startswith("ses-")), "ses-unk")
                 run = next((p for p in parts if p.startswith("run-")), "run-unk")
+<<<<<<< HEAD
 
                 subject_token = sub.split("-", 1)[-1]
                 try:
@@ -124,10 +125,50 @@ def build_manifests(project_root=None):
                         "raw_metadata": "{}",
                         "split": "train",
                     })
+=======
+                
+                # The run number (e.g., 037) maps to the specific sentence stimulus/category.
+                # Use the run number as the initial classification label to enable learning.
+                label_val = run.replace("run-", "")
+                if label_val.isdigit():
+                    label_val = int(label_val)
+                
+                text_str = ""
+                # Try to load the text from the downloaded textdataset
+                text_path = project_root / "ds005170-1.1.2" / "textdataset" / f"split_data_{label_val}.xlsx"
+                if text_path.exists():
+                    try:
+                        xlsx_df = pd.read_excel(text_path)
+                        # We try to find the longest string in the first row, or column named "Sentence"/"Text"
+                        text_str = str(xlsx_df.iloc[0, 0]) # Best effort default
+                        for col in xlsx_df.columns:
+                            if any(x in str(col).lower() for x in ["text", "sentence", "stimuli", "word"]):
+                                text_str = str(xlsx_df[col].iloc[0])
+                                break
+                    except Exception as e:
+                        logger.warning(f"Failed to read {text_path}: {e}")
+                
+                rows.append({
+                    "trial_id": f"chisco_{sub}_{ses}_{run}",
+                    "subject_id": sub,
+                    "session_id": f"chisco_{sub}_{ses}",
+                    "dataset": "chisco",
+                    "task": task,
+                    "eeg_path": str(filepath),
+                    "onset": 0.0,
+                    "duration": -1.0,
+                    "trial_type": "imagined_speech",
+                    "label": label_val,
+                    "text": text_str,
+                    "raw_metadata": "{}",
+                    "split": "train" # Default to train, user can split later
+                })
+>>>>>>> c3493edfeb3979b79d52d844a407b49202bcc020
                 
             # 2. Thinking Out Loud (Use _events.tsv)
             elif dataset == "thinking_out_loud":
                 sub = next((p for p in filepath.stem.split('_') if p.startswith("sub-")), "sub-unk")
+<<<<<<< HEAD
                 session_name = filepath.parent.parent.name if filepath.parent.parent.name.startswith("ses-") else "ses-unk"
                 events_path = filepath.parents[3] / "derivatives" / sub / session_name / f"{sub}_{session_name}_events.dat"
 
@@ -150,6 +191,22 @@ def build_manifests(project_root=None):
                         for idx, ev in enumerate(events):
                             onset_sample = int(ev[0])
                             event_code = int(ev[1])
+=======
+                
+                if events_path.exists():
+                    try:
+                        events_df = pd.read_csv(events_path, sep='\t')
+                        for idx, ev in events_df.iterrows():
+                            onset = float(ev["onset"])
+                            duration = float(ev.get("duration", -1.0))
+                            trial_type = ev.get("trial_type", "unknown")
+                            
+                            # Thinking Out Loud has 4 directional commands. 
+                            # We extract it from 'value' or 'trial_type' to establish the classification label.
+                            label_val = ev.get("value", trial_type)
+                            text_str = str(label_val).lower().replace("imagined", "").strip()
+                            
+>>>>>>> c3493edfeb3979b79d52d844a407b49202bcc020
                             rows.append({
                                 "trial_id": f"tol_{filepath.stem}_trial{idx:03d}",
                                 "subject_id": sub,
@@ -158,11 +215,21 @@ def build_manifests(project_root=None):
                                 "task": "inner_speech_command_classification",
                                 "label": label_map.get(event_code, f"command_{event_code}"),
                                 "eeg_path": str(filepath),
+<<<<<<< HEAD
                                 "onset": onset_sample / sfreq,
                                 "duration": 2.0,
                                 "trial_type": label_map.get(event_code, f"command_{event_code}"),
                                 "raw_metadata": json.dumps({"event_code": event_code}, ensure_ascii=False),
                                 "split": "train",
+=======
+                                "onset": onset,
+                                "duration": duration,
+                                "trial_type": trial_type,
+                                "label": label_val,
+                                "text": text_str,
+                                "raw_metadata": "{}",
+                                "split": "train"
+>>>>>>> c3493edfeb3979b79d52d844a407b49202bcc020
                             })
                     else:
                         logger.warning(f"Thinking Out Loud events file missing for {filepath}; falling back to a single continuous trial.")
@@ -191,8 +258,14 @@ def build_manifests(project_root=None):
                         "label": "command_0",
                         "eeg_path": str(filepath),
                         "onset": 0.0,
+<<<<<<< HEAD
                         "duration": 2.0,
                         "trial_type": "command_0",
+=======
+                        "duration": -1.0,
+                        "trial_type": "continuous",
+                        "text": "",
+>>>>>>> c3493edfeb3979b79d52d844a407b49202bcc020
                         "raw_metadata": "{}",
                         "split": "train",
                     })
@@ -226,6 +299,8 @@ def build_manifests(project_root=None):
                                     "onset": 0.0,
                                     "duration": -1.0,
                                     "trial_type": "sentence",
+                                    "label": i,
+                                    "text": "", # Zuco text parsing requires H5 deep dive, stub for now
                                     "raw_metadata": "{}",
                                     "split": "train"
                                 })
@@ -257,7 +332,12 @@ def build_manifests(project_root=None):
                         "eeg_path": str(filepath),
                         "onset": 0.0,
                         "duration": -1.0,
+<<<<<<< HEAD
                         "trial_type": "pretraining",
+=======
+                        "trial_type": "continuous",
+                        "text": "",
+>>>>>>> c3493edfeb3979b79d52d844a407b49202bcc020
                         "raw_metadata": "{}",
                         "split": "train"
                     })

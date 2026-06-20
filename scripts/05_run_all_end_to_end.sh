@@ -1,49 +1,26 @@
 #!/bin/bash
-# ==============================================================================
-# 05_run_all_end_to_end.sh — Master script for the full NeuroGraph-Conformer pipeline.
-#
-# This script executes:
-#   0. Dataset download (Thinking Out Loud, Chisco, ZuCo)
-#   1. Dataset scanning
-#   2. Metadata extraction (build_manifests.py + fix_trials.py)
-#   3. Parallel Preprocessing & Caching (CPU-bound)
-#   4. Sequential Training (GPU-bound, sequential to avoid OOM)
-#
-# Usage:
-#   nohup bash scripts/05_run_all_end_to_end.sh [experiment_name] > pipeline.log 2>&1 &
-#
-# Options:
-#   --skip-download    Skip the download step (if data is already present)
-#   --skip-preprocess  Skip the preprocessing step (if .pt caches already exist)
-# ==============================================================================
-set -e  # Exit immediately if a command exits with a non-zero status
+# Master Script: Run all training phases sequentially
+set -e
 
-# ── Resolve paths from script location (not CWD) ──
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+DATASET=${1:-"chisco"}
+PROTOCOL=${2:-"within_subject"}
 
-cd "$PROJECT_ROOT"
-export PROJECT_ROOT
+echo "======================================"
+echo " Starting Full Training Pipeline"
+echo " Dataset: $DATASET"
+echo " Protocol: $PROTOCOL"
+echo "======================================"
 
-EXPERIMENT_NAME="${1:-End_to_End_Run}"
-SKIP_DOWNLOAD=0
-SKIP_PREPROCESS=0
+# Run Phase 1
+bash scripts/train_phase1.sh $DATASET $PROTOCOL
 
-for arg in "$@"; do
-  case "$arg" in
-    --skip-download)   SKIP_DOWNLOAD=1 ;;
-    --skip-preprocess) SKIP_PREPROCESS=1 ;;
-  esac
-done
+# Run Phase 2
+bash scripts/train_phase2.sh $DATASET $PROTOCOL
 
-echo "==========================================================="
-echo "   NeuroGraph-Conformer End-to-End Pipeline Initialization "
-echo "==========================================================="
-echo "[INFO] PROJECT_ROOT  = $PROJECT_ROOT"
-echo "[INFO] EXPERIMENT    = $EXPERIMENT_NAME"
-echo "[INFO] SKIP_DOWNLOAD = $SKIP_DOWNLOAD"
-echo ""
+# Run Phase 3
+bash scripts/train_phase3.sh $DATASET $PROTOCOL
 
+<<<<<<< HEAD
 # ──────────────────────────────────────────────────────────────────
 # STEP 0: Download all 3 datasets
 # ──────────────────────────────────────────────────────────────────
@@ -209,3 +186,9 @@ echo "==========================================================="
 echo "            FULL PIPELINE COMPLETED                        "
 echo "==========================================================="
 echo "==========================================================="
+=======
+echo "======================================"
+echo " All Training Phases Completed Successfully!"
+echo " Check 'experiments/phase3_${DATASET}' for the final model."
+echo "======================================"
+>>>>>>> c3493edfeb3979b79d52d844a407b49202bcc020

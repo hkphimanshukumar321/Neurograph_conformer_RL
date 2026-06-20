@@ -18,17 +18,25 @@ echo "[INFO] Logs will be written to training_$DATASET.log"
 if [ "$MODE" = "foreground" ]; then
     echo "[INFO] Running training in foreground. Press Ctrl+C to abort."
     python scripts/train.py \
+<<<<<<< HEAD
             python scripts/train_with_rl.py \
         --config configs/models/conformer_small.yaml \
+=======
+        --config configs/models/neurograph_full.yaml \
+>>>>>>> c3493edfeb3979b79d52d844a407b49202bcc020
         --dataset "$DATASET" \
         --experiment "$EXPERIMENT" \
             --stage 3 \
         2>&1 | tee "training_$DATASET.log"
 else
     nohup python scripts/train.py \
+<<<<<<< HEAD
             nohup python scripts/train_with_rl.py \
             --stage 3 \
         --config configs/models/conformer_small.yaml \
+=======
+        --config configs/models/neurograph_full.yaml \
+>>>>>>> c3493edfeb3979b79d52d844a407b49202bcc020
         --dataset "$DATASET" \
         --experiment "$EXPERIMENT" \
         > "training_$DATASET.log" 2>&1 &

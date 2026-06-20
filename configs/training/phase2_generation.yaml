@@ -1,0 +1,18 @@
+# Phase 2: Supervised Generation
+# Objective: Freeze or slow-train encoder, train decoder with Teacher Forcing (CE) + CTC.
+model:
+  decoder:
+    enabled: true
+  heads:
+    generation:
+      vocab_size: 100 # Will be overridden dynamically by Tokenizer
+
+training:
+  max_epochs: 100
+  lr: 0.0001 # Lower LR to preserve encoder representations
+  loss_weights:
+    cls: 0.1
+    contrast: 0.1
+    ctc: 0.3
+    gen: 1.0
+    rl: 0.0

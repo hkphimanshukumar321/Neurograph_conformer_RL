@@ -34,9 +34,11 @@ class RewardComputer:
         self.weights = {}
         for key in ["semantic_similarity", "wer", "cer", "retrieval_correctness",
                      "fluency", "phoneme_consistency"]:
-            if key in reward_cfg:
-                cfg = reward_cfg[key]
-                self.weights[key] = cfg.get("weight", 0.0)
+            weight_key = f"{key}_weight"
+            if weight_key in reward_cfg:
+                self.weights[key] = reward_cfg.get(weight_key, 0.0)
+            elif key in reward_cfg and isinstance(reward_cfg[key], dict):
+                self.weights[key] = reward_cfg[key].get("weight", 0.0)
 
         # Lazy-load semantic similarity encoder
         self._sem_encoder = None
@@ -145,7 +147,7 @@ class RLTrainer:
 
     def train_step(
         self,
-        eeg: torch.Tensor,
+        encoder_output: torch.Tensor,
         reference_texts: list[str],
         tokenizer: Any,
     ) -> dict[str, float]:
@@ -153,8 +155,8 @@ class RLTrainer:
 
         Parameters
         ----------
-        eeg : torch.Tensor
-            EEG input, shape (batch, C, T).
+        encoder_output : torch.Tensor
+            Encoder output from the model, shape (batch, seq_len, d_model).
         reference_texts : list[str]
             Ground truth text sequences.
         tokenizer : Any
@@ -167,23 +169,20 @@ class RLTrainer:
         """
         self.model.train()
 
-        # Encode
-        encoder_output = self.model.encode(eeg.to(self.device))
-
         decoder = self.model.generation_head.decoder
 
         # Greedy decode (baseline)
         greedy_ids = decoder.greedy_decode(
             encoder_output,
-            sos_id=tokenizer.sos_id,
-            eos_id=tokenizer.eos_id,
+            sos_id=tokenizer.SOS_ID,
+            eos_id=tokenizer.EOS_ID,
         )
 
         # Sample decode
         sample_ids, sample_log_probs = decoder.sample_decode(
             encoder_output,
-            sos_id=tokenizer.sos_id,
-            eos_id=tokenizer.eos_id,
+            sos_id=tokenizer.SOS_ID,
+            eos_id=tokenizer.EOS_ID,
             temperature=1.0,
         )
 
@@ -204,6 +203,7 @@ class RLTrainer:
 
         return {
             "rl_loss": loss.item(),
+            "rl_loss_tensor": loss,
             "greedy_reward": greedy_rewards.mean().item(),
             "sample_reward": sample_rewards.mean().item(),
             "advantage": (sample_rewards - greedy_rewards).mean().item(),

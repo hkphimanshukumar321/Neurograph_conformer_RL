@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Any, Callable
 
 from torch.utils.data import Dataset
+from torch.nn.utils.rnn import pad_sequence
+from .tokenizer import Tokenizer
 
 logger = logging.getLogger(__name__)
 
@@ -26,12 +28,14 @@ class ManifestDataset(Dataset):
         split: str = "train",
         subjects: list[str] | None = None,
         transform: Callable | None = None,
+        tokenizer: Tokenizer | None = None,
         max_samples: int = 500,
     ):
         self.manifest_path = Path(manifest_path)
         self.dataset_name = dataset_name
         self.split = split
         self.transform = transform
+        self.tokenizer = tokenizer
         self.max_samples = max_samples
         
         # Load the manifest
@@ -139,9 +143,25 @@ class ManifestDataset(Dataset):
             raw_lab = str(row[self._label_col])
             label_val = self.label_str_to_int.get(raw_lab, 0)
             
+        # Process text and tokenize
+        text = str(row.get("text", ""))
+        target_tokens = torch.empty(0, dtype=torch.long)
+        target_length = 0
+        
+        if self.tokenizer is not None and text:
+            # We add EOS but usually do NOT feed SOS as target.
+            # In standard setup: Target is [token1, token2, EOS]
+            ids = self.tokenizer.encode(text, add_special_tokens=False)
+            ids.append(self.tokenizer.EOS_ID)
+            target_tokens = torch.tensor(ids, dtype=torch.long)
+            target_length = len(ids)
+            
         sample = {
             "eeg": eeg,
             "label": torch.tensor(label_val, dtype=torch.long),
+            "text": text,
+            "target_tokens": target_tokens,
+            "target_length": torch.tensor(target_length, dtype=torch.long),
             "dataset": self.dataset_name,
             "subject_id": str(row.get("subject_id", "unknown")),
             "trial_id": str(row.get("trial_id", f"trial_{idx}")),
@@ -166,3 +186,25 @@ class ManifestDataset(Dataset):
         return weights
 
 
+def collate_fn(batch: list[dict]) -> dict:
+    """Custom collate to pad target_tokens correctly."""
+    collated = {
+        "eeg": torch.stack([item["eeg"] for item in batch]),
+        "label": torch.stack([item["label"] for item in batch]),
+        "text": [item["text"] for item in batch],
+        "dataset": [item["dataset"] for item in batch],
+        "subject_id": [item["subject_id"] for item in batch],
+        "trial_id": [item["trial_id"] for item in batch],
+    }
+    
+    lengths = [item["target_length"].item() for item in batch]
+    collated["target_length"] = torch.tensor(lengths, dtype=torch.long)
+    
+    # Pad tokens
+    if sum(lengths) > 0:
+        tokens = [item["target_tokens"] for item in batch]
+        collated["target_tokens"] = pad_sequence(tokens, batch_first=True, padding_value=0)
+    else:
+        collated["target_tokens"] = torch.empty((len(batch), 0), dtype=torch.long)
+        
+    return collated

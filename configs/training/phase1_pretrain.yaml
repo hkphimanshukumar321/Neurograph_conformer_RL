@@ -1,0 +1,14 @@
+# Phase 1: Pre-train Encoder
+# Objective: Train Classification + Contrastive headers, no decoder.
+model:
+  decoder:
+    enabled: false
+
+training:
+  max_epochs: 100
+  loss_weights:
+    cls: 1.0
+    contrast: 0.3
+    ctc: 0.0
+    gen: 0.0
+    rl: 0.0

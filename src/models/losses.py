@@ -135,6 +135,86 @@ class NTXentLoss(nn.Module):
         return F.cross_entropy(sim, labels)
 
 
+class SupConLoss(nn.Module):
+    """Supervised Contrastive Loss (Khosla et al., 2020).
+
+    Uses class labels to define positive pairs (same class) and negative
+    pairs (different class) within a batch.  No text encoder needed —
+    works purely with integer labels from ManifestDataset.
+
+    Parameters
+    ----------
+    temperature : float
+        Temperature scaling for similarity logits.
+    """
+
+    def __init__(self, temperature: float = 0.07):
+        super().__init__()
+        self.temperature = temperature
+
+    def forward(
+        self,
+        features: torch.Tensor,
+        labels: torch.Tensor,
+    ) -> torch.Tensor:
+        """Compute supervised contrastive loss.
+
+        Parameters
+        ----------
+        features : torch.Tensor
+            L2-normalized embeddings, shape (batch, d_embed).
+        labels : torch.Tensor
+            Integer class labels, shape (batch,).
+
+        Returns
+        -------
+        torch.Tensor
+            Scalar loss.
+        """
+        device = features.device
+        batch_size = features.shape[0]
+
+        if batch_size <= 1:
+            return torch.tensor(0.0, device=device, requires_grad=True)
+
+        # Similarity matrix: (B, B)
+        sim = torch.mm(features, features.t()) / self.temperature
+
+        # Mask: positive pairs share the same label (excluding self)
+        labels_col = labels.unsqueeze(1)  # (B, 1)
+        pos_mask = (labels_col == labels_col.t()).float()  # (B, B)
+        pos_mask.fill_diagonal_(0.0)  # exclude self
+
+        n_pos = pos_mask.sum(dim=1)  # (B,)
+        has_pos = n_pos > 0
+
+        if not has_pos.any():
+            return torch.tensor(0.0, device=device, requires_grad=True)
+
+        # For numerical stability: subtract max per row
+        sim_max, _ = sim.max(dim=1, keepdim=True)
+        sim = sim - sim_max.detach()
+
+        # Mask out self-similarity for the denominator
+        self_mask = torch.eye(batch_size, device=device).bool()
+        exp_sim = torch.exp(sim)
+        exp_sim = exp_sim.masked_fill(self_mask, 0.0)
+
+        # Denominator: sum of exp(sim) over all non-self entries
+        denom = exp_sim.sum(dim=1, keepdim=True).clamp(min=1e-8)  # (B, 1)
+
+        # log(exp(sim_ij) / denom_i) = sim_ij - log(denom_i)
+        log_prob = sim - torch.log(denom)  # (B, B)
+
+        # Mean of log-prob over positive pairs for each anchor
+        mean_log_prob_pos = (pos_mask * log_prob).sum(dim=1) / n_pos.clamp(min=1)
+
+        # Average over anchors that have at least one positive
+        loss = -mean_log_prob_pos[has_pos].mean()
+
+        return loss
+
+
 class TripletContrastiveLoss(nn.Module):
     """Triplet margin loss for retrieval.
 
