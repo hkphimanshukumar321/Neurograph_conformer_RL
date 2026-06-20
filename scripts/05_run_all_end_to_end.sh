@@ -69,11 +69,30 @@ echo ""
 # STEP 2: Build unified trials.csv manifest
 # ──────────────────────────────────────────────────────────────────
 echo "[STEP 2/4] Preparing Unified Metadata (trials.csv)..."
+echo "[PHASE 1/3] Metadata assembly and label resolution"
 python "$SCRIPT_DIR/build_manifests.py"
 python "$SCRIPT_DIR/fix_trials.py"
 
-# Quick validation
 TRIALS_CSV="$PROJECT_ROOT/data/processed/manifests/trials.csv"
+export TRIALS_CSV
+
+python - <<'PY'
+import os
+from pathlib import Path
+import pandas as pd
+
+trials_csv = Path(os.environ["TRIALS_CSV"])
+if trials_csv.exists():
+  df = pd.read_csv(trials_csv)
+  label_col = "label" if "label" in df.columns else ("trial_type" if "trial_type" in df.columns else "task")
+  print("[INFO] Label summary by dataset:")
+  for dataset, sub in df.groupby("dataset"):
+    counts = sub[label_col].astype(str).value_counts()
+    print(f"    {dataset}: {len(counts)} classes via '{label_col}'")
+    print(counts.head(8).to_string())
+PY
+
+# Quick validation
 if [[ -f "$TRIALS_CSV" ]]; then
   TRIAL_COUNT=$(wc -l < "$TRIALS_CSV")
   echo "[INFO] trials.csv has $TRIAL_COUNT lines (including header)"
@@ -89,13 +108,16 @@ echo ""
 # STEP 3: Parallel Preprocessing & Caching
 # ──────────────────────────────────────────────────────────────────
 if [[ "$SKIP_PREPROCESS" == "0" ]]; then
+  echo "[PHASE 2/3] Parallel preprocessing and caching"
   echo "[STEP 3/4] Parallel Preprocessing & Caching..."
   echo "This step uses joblib multiprocessing to process all datasets concurrently."
   echo "An automatic CPU OOM guardrail limits max workers to (CPU_CORES / 2)."
+  PREPROCESS_JOBS="${PREPROCESS_JOBS:-8}"
+  echo "[INFO] PREPROCESS_JOBS=${PREPROCESS_JOBS} (override with PREPROCESS_JOBS=<n>)"
   python "$SCRIPT_DIR/03_preprocess_and_cache.py" \
     --project_root "$PROJECT_ROOT" \
     --target_sfreq 250.0 \
-    --jobs -1 \
+    --jobs "$PREPROCESS_JOBS" \
     2>&1 | tee "$PROJECT_ROOT/master_preprocessing.log"
   echo ""
 else
@@ -106,6 +128,7 @@ fi
 # ──────────────────────────────────────────────────────────────────
 # STEP 4: Sequential Training
 # ──────────────────────────────────────────────────────────────────
+echo "[PHASE 3/3] Sequential training"
 echo "[STEP 4/4] Sequential Training..."
 echo "Training datasets sequentially to prevent GPU Out-of-Memory (OOM) crashes."
 
@@ -114,6 +137,11 @@ for DATASET in chisco thinking_out_loud zuco; do
     echo "----------------------------------------------------"
     echo "  Starting Training: $DATASET"
     echo "----------------------------------------------------"
+
+    if [[ "$DATASET" == "zuco" ]]; then
+      echo "[INFO] ZuCo is pretraining-only; skipping supervised training in this pipeline."
+      continue
+    fi
     
     # Check if this dataset has any trials in the manifest
     if grep -q ",$DATASET," "$TRIALS_CSV" 2>/dev/null; then

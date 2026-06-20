@@ -1,10 +1,17 @@
 import pandas as pd
 import torch
 from torch.utils.data import Dataset, DataLoader
-import pytorch_lightning as pl
 from pathlib import Path
 from sklearn.model_selection import train_test_split
 from typing import Optional, List, Tuple
+
+try:
+    import pytorch_lightning as pl
+    LightningDataModuleBase = pl.LightningDataModule
+except Exception:
+    class LightningDataModuleBase:
+        def __init__(self, *args, **kwargs):
+            pass
 
 class UnifiedEEGDataset(Dataset):
     def __init__(self, manifest_df: pd.DataFrame, data_dir: str):
@@ -63,7 +70,7 @@ def collate_fn(batch: List[Tuple[torch.Tensor, int]]) -> Tuple[torch.Tensor, tor
         
     return batch_x, attention_mask, torch.tensor(labels, dtype=torch.long)
 
-class UnifiedDataModule(pl.LightningDataModule):
+class UnifiedDataModule(LightningDataModuleBase):
     def __init__(self, manifest_path: str, data_dir: str, batch_size: int = 32, num_workers: int = 4):
         super().__init__()
         self.manifest_path = Path(manifest_path)

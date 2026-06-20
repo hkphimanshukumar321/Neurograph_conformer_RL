@@ -73,33 +73,55 @@ def process_group(source_file, group, output_base_dir, target_sfreq):
         try:
             import h5py
             with h5py.File(source_file, 'r') as f:
-                if 'sentenceData' not in f:
-                    raise ValueError(f"ZuCo file {source_file} missing 'sentenceData' struct")
-                
-                sentence_data = f['sentenceData']
-                
-                for idx_in_group, (idx, row) in enumerate(group.iterrows()):
-                    trial_id = row["trial_id"]
-                    out_file = dataset_out_dir / f"{trial_id}.pt"
-                    
-                    if out_file.exists():
-                        skip += 1
-                        continue
-                        
-                    try:
-                        field_to_extract = 'rawData' if 'rawData' in sentence_data else list(sentence_data.keys())[0]
-                        ref = sentence_data[field_to_extract][idx_in_group, 0]
-                        eeg_data = np.array(f[ref])
-                        
-                        if eeg_data.shape[0] > eeg_data.shape[1]:
-                            eeg_data = eeg_data.T
-                            
-                        tensor_data = torch.tensor(eeg_data, dtype=torch.float32)
+                if 'sentenceData' in f:
+                    sentence_data = f['sentenceData']
+
+                    for idx_in_group, (idx, row) in enumerate(group.iterrows()):
+                        trial_id = row["trial_id"]
+                        out_file = dataset_out_dir / f"{trial_id}.pt"
+
+                        if out_file.exists():
+                            skip += 1
+                            continue
+
+                        try:
+                            field_to_extract = 'rawData' if 'rawData' in sentence_data else list(sentence_data.keys())[0]
+                            ref = sentence_data[field_to_extract][idx_in_group, 0]
+                            eeg_data = np.array(f[ref])
+
+                            if eeg_data.shape[0] > eeg_data.shape[1]:
+                                eeg_data = eeg_data.T
+
+                            tensor_data = torch.tensor(eeg_data, dtype=torch.float32)
+                            torch.save(tensor_data, out_file)
+                            success += 1
+                        except Exception as e:
+                            logger.error(f"Failed to extract trial {trial_id} from ZuCo file {source_file}: {e}")
+                            fail += 1
+                else:
+                    eeg_group = f.get('EEG')
+                    if eeg_group is None or 'data' not in eeg_group:
+                        raise ValueError(f"ZuCo file {source_file} missing both 'sentenceData' and 'EEG/data'")
+
+                    eeg_data = np.array(eeg_group['data'])
+                    if eeg_data.ndim != 2:
+                        raise ValueError(f"ZuCo file {source_file} has unexpected EEG/data shape {eeg_data.shape}")
+
+                    if eeg_data.shape[0] > eeg_data.shape[1]:
+                        eeg_data = eeg_data.T
+
+                    tensor_data = torch.tensor(eeg_data, dtype=torch.float32)
+
+                    for _, row in group.iterrows():
+                        trial_id = row["trial_id"]
+                        out_file = dataset_out_dir / f"{trial_id}.pt"
+
+                        if out_file.exists():
+                            skip += 1
+                            continue
+
                         torch.save(tensor_data, out_file)
                         success += 1
-                    except Exception as e:
-                        logger.error(f"Failed to extract trial {trial_id} from ZuCo file {source_file}: {e}")
-                        fail += 1
         except Exception as e:
             logger.error(f"Failed to process ZuCo file {source_file}: {e}")
             fail += len(group)
