@@ -155,4 +155,57 @@ done
 
 echo "==========================================================="
 echo "                 PIPELINE COMPLETED                        "
+
+# ──────────────────────────────────────────────────────────────────
+# STAGE 4 (Optional): RL Fine-tuning
+# ──────────────────────────────────────────────────────────────────
+RUN_RL_STAGE="${RUN_RL_STAGE:-0}"
+
+if [[ "$RUN_RL_STAGE" == "1" ]]; then
+  echo ""
+  echo "==========================================================="
+  echo "[STAGE 4/4] RL Fine-tuning with SCST Rewards"
+  echo "==========================================================="
+  
+  # RL fine-tuning on each trained model
+  for DATASET in chisco thinking_out_loud; do
+    if [[ "$DATASET" == "zuco" ]]; then
+      continue
+    fi
+    
+    STAGE3_CKPT="$PROJECT_ROOT/experiments/$EXPERIMENT_NAME/best_model.pt"
+    if [[ -f "$STAGE3_CKPT" ]]; then
+      echo ""
+      echo "  [RL] Starting Stage 4 fine-tuning for $DATASET..."
+      echo "  [RL] Using Stage 3 checkpoint: $STAGE3_CKPT"
+      
+      python "$SCRIPT_DIR/train_with_rl.py" \
+        --config configs/models/conformer_small.yaml \
+        --dataset "$DATASET" \
+        --experiment "${EXPERIMENT_NAME}_RL_stage4" \
+        --stage 4 \
+        --pretrained "$STAGE3_CKPT" \
+        --rl-config configs/training/train_rl.yaml \
+        2>&1 | tee "$PROJECT_ROOT/master_rl_finetuning_$DATASET.log"
+      
+      echo "  [RL] Finished RL stage 4 for $DATASET!"
+    else
+      echo "[SKIP-RL] No Stage 3 checkpoint found for $DATASET at $STAGE3_CKPT"
+    fi
+  done
+  
+  echo ""
+  echo "==========================================================="
+  echo "       STAGE 4 RL FINE-TUNING COMPLETED"
+  echo "==========================================================="
+else
+  echo ""
+  echo "[INFO] Stage 4 RL fine-tuning skipped. To enable, run:"
+  echo "       RUN_RL_STAGE=1 bash scripts/05_run_all_end_to_end.sh ..."
+  echo ""
+fi
+
+echo "==========================================================="
+echo "            FULL PIPELINE COMPLETED                        "
+echo "==========================================================="
 echo "==========================================================="
