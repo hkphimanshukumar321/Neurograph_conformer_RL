@@ -138,9 +138,16 @@ def build_manifests(project_root=None):
                         else:
                             # It's a .dat file (pickle)
                             import pickle
+                            import mne
                             with open(events_path, "rb") as ep:
                                 events = pickle.load(ep)
                             
+                            try:
+                                raw = mne.io.read_raw_bdf(filepath, preload=False, verbose=False)
+                                sfreq = float(raw.info.get("sfreq", 128.0))
+                            except Exception:
+                                sfreq = 128.0
+
                             label_map = {
                                 0: "command_0",
                                 1: "command_1",
@@ -150,8 +157,6 @@ def build_manifests(project_root=None):
                             for idx, ev in enumerate(events):
                                 onset_sample = int(ev[0])
                                 event_code = int(ev[1])
-                                # For .dat, we don't have exact duration or sfreq easily here, fallback to sfreq=128
-                                sfreq = 128.0
                                 label_val = label_map.get(event_code, f"command_{event_code}")
                                 text_str = label_val.replace("_", " ")
                                 rows.append({
