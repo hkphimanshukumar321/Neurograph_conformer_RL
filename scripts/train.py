@@ -202,8 +202,11 @@ def main():
             vocab_size=vocab_size,
         )
 
-    total_params = sum(p.numel() for p in model.parameters()) / 1e6
-    logger.info(f"Model parameters: {total_params:.2f}M")
+    try:
+        total_params = sum(p.numel() for p in model.parameters()) / 1e6
+        logger.info(f"Model parameters: {total_params:.2f}M")
+    except ValueError:
+        logger.info("Model parameters: (deferred until first forward pass due to lazy modules)")
     
     # Log active heads
     if hasattr(model, 'classification_heads'):
