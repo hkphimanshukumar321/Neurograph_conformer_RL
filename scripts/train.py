@@ -57,7 +57,14 @@ def main():
 
     # Load configs
     base_cfg = load_config("configs/base.yaml")
-    dataset_cfg = load_config(f"configs/datasets/{args.dataset}.yaml")
+    import os
+    dataset_cfg_path = f"configs/datasets/{args.dataset}.yaml"
+    if os.path.exists(dataset_cfg_path):
+        dataset_cfg = load_config(dataset_cfg_path)
+    else:
+        logger.warning(f"Dataset config {dataset_cfg_path} not found. Using default empty dataset config.")
+        from omegaconf import OmegaConf
+        dataset_cfg = OmegaConf.create({"dataset": {"name": args.dataset}})
     model_cfg = load_config(args.config)
     cfg = merge_configs(base_cfg, dataset_cfg, model_cfg)
 
