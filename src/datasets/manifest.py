@@ -42,7 +42,8 @@ class ManifestDataset(Dataset):
         df = pd.read_csv(manifest_path)
         
         # Filter by dataset
-        df = df[df["dataset"] == dataset_name]
+        if dataset_name and dataset_name not in ["Multiclass_Full_Run", "all"]:
+            df = df[df["dataset"] == dataset_name]
         
         # Filter by split (if split column exists)
         if "split" in df.columns:
@@ -118,7 +119,7 @@ class ManifestDataset(Dataset):
             data_processed_dir = self.manifest_path.parent.parent  # data/processed/
             cache_path = (
                 data_processed_dir / "common_250hz"
-                / self.dataset_name / f"{row['trial_id']}.pt"
+                / str(row['dataset']) / f"{row['trial_id']}.pt"
             )
         
         if not cache_path.exists():

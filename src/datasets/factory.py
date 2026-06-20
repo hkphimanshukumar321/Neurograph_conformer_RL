@@ -39,8 +39,20 @@ def get_dataset(
     Returns:
         A PyTorch Dataset ready for a DataLoader.
     """
+    if dataset_name == "Multiclass_Full_Run" or dataset_name == "all":
+        from src.datasets.manifest import ManifestDataset
+        logger.info(f"Loading ALL datasets for {dataset_name} (split={split}, max_samples={max_samples})")
+        return ManifestDataset(
+            manifest_path=manifest_path,
+            dataset_name=dataset_name,
+            split=split,
+            subjects=subjects,
+            transform=transform,
+            max_samples=max_samples,
+        )
+
     if dataset_name not in _REGISTRY:
-        raise ValueError(f"Unknown dataset: {dataset_name}. Available: {list(_REGISTRY.keys())}")
+        raise ValueError(f"Unknown dataset: {dataset_name}. Available: {list(_REGISTRY.keys())} or 'Multiclass_Full_Run'")
     
     logger.info(f"Loading {dataset_name} (split={split}, max_samples={max_samples})")
     
