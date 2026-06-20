@@ -61,71 +61,6 @@ def build_manifests(project_root=None):
                 sub = next((p for p in parts if p.startswith("sub-")), "sub-unk")
                 ses = next((p for p in parts if p.startswith("ses-")), "ses-unk")
                 run = next((p for p in parts if p.startswith("run-")), "run-unk")
-<<<<<<< HEAD
-
-                subject_token = sub.split("-", 1)[-1]
-                try:
-                    subject_index = int(subject_token)
-                except ValueError:
-                    subject_index = None
-
-                workbook_path = filepath.parents[3] / "textdataset" / f"split_data_{subject_index}.xlsx" if subject_index is not None else None
-
-                try:
-                    import mne
-
-                    raw = mne.io.read_raw_edf(filepath, preload=False, verbose=False)
-                    onsets = list(raw.annotations.onset)
-                except Exception as e:
-                    logger.warning(f"Failed to read Chisco annotations for {filepath}: {e}. Falling back to a single labeled trial.")
-                    onsets = []
-
-                label_pairs: list[tuple[str, str]] = []
-                if workbook_path is not None and workbook_path.exists():
-                    try:
-                        label_pairs = _read_chisco_label_pairs(workbook_path)
-                    except Exception as e:
-                        logger.warning(f"Failed to read Chisco workbook {workbook_path}: {e}")
-
-                if onsets and label_pairs:
-                    num_trials = min(len(onsets), len(label_pairs))
-                    if len(onsets) != len(label_pairs):
-                        logger.warning(
-                            f"Chisco file {filepath} has {len(onsets)} annotations but {len(label_pairs)} workbook rows; using {num_trials}."
-                        )
-
-                    for i in range(num_trials):
-                        sentence_text, label_text = label_pairs[i]
-                        rows.append({
-                            "trial_id": f"chisco_{sub}_{ses}_{run}_trial{i:03d}",
-                            "subject_id": sub,
-                            "session_id": f"chisco_{sub}_{ses}",
-                            "dataset": "chisco",
-                            "task": "sentence_level_imagined_speech",
-                            "label": label_text,
-                            "eeg_path": str(filepath),
-                            "onset": float(onsets[i]),
-                            "duration": 2.0,
-                            "trial_type": sentence_text,
-                            "raw_metadata": json.dumps({"sentence": sentence_text, "label": label_text}, ensure_ascii=False),
-                            "split": "train",
-                        })
-                else:
-                    rows.append({
-                        "trial_id": f"chisco_{sub}_{ses}_{run}",
-                        "subject_id": sub,
-                        "session_id": f"chisco_{sub}_{ses}",
-                        "dataset": "chisco",
-                        "task": "sentence_level_imagined_speech",
-                        "label": "imagined_speech",
-                        "eeg_path": str(filepath),
-                        "onset": 0.0,
-                        "duration": 2.0,
-                        "trial_type": "imagined_speech",
-                        "raw_metadata": "{}",
-                        "split": "train",
-                    })
-=======
                 
                 # The run number (e.g., 037) maps to the specific sentence stimulus/category.
                 # Use the run number as the initial classification label to enable learning.
@@ -163,35 +98,15 @@ def build_manifests(project_root=None):
                     "raw_metadata": "{}",
                     "split": "train" # Default to train, user can split later
                 })
->>>>>>> c3493edfeb3979b79d52d844a407b49202bcc020
                 
             # 2. Thinking Out Loud (Use _events.tsv)
             elif dataset == "thinking_out_loud":
                 sub = next((p for p in filepath.stem.split('_') if p.startswith("sub-")), "sub-unk")
-<<<<<<< HEAD
                 session_name = filepath.parent.parent.name if filepath.parent.parent.name.startswith("ses-") else "ses-unk"
-                events_path = filepath.parents[3] / "derivatives" / sub / session_name / f"{sub}_{session_name}_events.dat"
-
-                try:
-                    import pickle
-                    import mne
-
-                    raw = mne.io.read_raw_bdf(filepath, preload=False, verbose=False)
-                    sfreq = float(raw.info.get("sfreq", 128.0))
-
-                    if events_path.exists():
-                        events = pickle.load(open(events_path, "rb"))
-                        label_map = {
-                            0: "command_0",
-                            1: "command_1",
-                            2: "command_2",
-                            3: "command_3",
-                        }
-
-                        for idx, ev in enumerate(events):
-                            onset_sample = int(ev[0])
-                            event_code = int(ev[1])
-=======
+                
+                events_path = filepath.parents[3] / "derivatives" / sub / session_name / f"{sub}_{session_name}_events.tsv"
+                if not events_path.exists():
+                    events_path = filepath.parents[3] / "derivatives" / sub / session_name / f"{sub}_{session_name}_events.dat"
                 
                 if events_path.exists():
                     try:
@@ -201,38 +116,26 @@ def build_manifests(project_root=None):
                             duration = float(ev.get("duration", -1.0))
                             trial_type = ev.get("trial_type", "unknown")
                             
-                            # Thinking Out Loud has 4 directional commands. 
-                            # We extract it from 'value' or 'trial_type' to establish the classification label.
                             label_val = ev.get("value", trial_type)
                             text_str = str(label_val).lower().replace("imagined", "").strip()
                             
->>>>>>> c3493edfeb3979b79d52d844a407b49202bcc020
                             rows.append({
                                 "trial_id": f"tol_{filepath.stem}_trial{idx:03d}",
                                 "subject_id": sub,
                                 "session_id": f"tol_{sub}",
                                 "dataset": "thinking_out_loud",
                                 "task": "inner_speech_command_classification",
-                                "label": label_map.get(event_code, f"command_{event_code}"),
+                                "label": label_val,
                                 "eeg_path": str(filepath),
-<<<<<<< HEAD
-                                "onset": onset_sample / sfreq,
-                                "duration": 2.0,
-                                "trial_type": label_map.get(event_code, f"command_{event_code}"),
-                                "raw_metadata": json.dumps({"event_code": event_code}, ensure_ascii=False),
-                                "split": "train",
-=======
                                 "onset": onset,
                                 "duration": duration,
                                 "trial_type": trial_type,
-                                "label": label_val,
                                 "text": text_str,
                                 "raw_metadata": "{}",
                                 "split": "train"
->>>>>>> c3493edfeb3979b79d52d844a407b49202bcc020
                             })
-                    else:
-                        logger.warning(f"Thinking Out Loud events file missing for {filepath}; falling back to a single continuous trial.")
+                    except Exception as e:
+                        logger.error(f"Failed to read events for {filepath}: {e}")
                         rows.append({
                             "trial_id": f"tol_{filepath.stem}",
                             "subject_id": sub,
@@ -242,13 +145,14 @@ def build_manifests(project_root=None):
                             "label": "command_0",
                             "eeg_path": str(filepath),
                             "onset": 0.0,
-                            "duration": 2.0,
-                            "trial_type": "command_0",
+                            "duration": -1.0,
+                            "trial_type": "continuous",
+                            "text": "",
                             "raw_metadata": "{}",
                             "split": "train",
                         })
-                except Exception as e:
-                    logger.error(f"Failed to read events for {filepath}: {e}")
+                else:
+                    logger.warning(f"Thinking Out Loud events file missing for {filepath}; falling back to a single continuous trial.")
                     rows.append({
                         "trial_id": f"tol_{filepath.stem}",
                         "subject_id": sub,
@@ -258,14 +162,9 @@ def build_manifests(project_root=None):
                         "label": "command_0",
                         "eeg_path": str(filepath),
                         "onset": 0.0,
-<<<<<<< HEAD
-                        "duration": 2.0,
-                        "trial_type": "command_0",
-=======
                         "duration": -1.0,
                         "trial_type": "continuous",
                         "text": "",
->>>>>>> c3493edfeb3979b79d52d844a407b49202bcc020
                         "raw_metadata": "{}",
                         "split": "train",
                     })
@@ -332,12 +231,8 @@ def build_manifests(project_root=None):
                         "eeg_path": str(filepath),
                         "onset": 0.0,
                         "duration": -1.0,
-<<<<<<< HEAD
-                        "trial_type": "pretraining",
-=======
                         "trial_type": "continuous",
                         "text": "",
->>>>>>> c3493edfeb3979b79d52d844a407b49202bcc020
                         "raw_metadata": "{}",
                         "split": "train"
                     })
