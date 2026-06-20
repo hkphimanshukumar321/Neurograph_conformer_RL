@@ -20,9 +20,9 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# ──── W&B Configuration ────
-# Note: Users should authenticate via `wandb login` in their terminal
-# or set WANDB_API_KEY in their environment variables.
+# ──── W&B API key setup ────
+# Set the API key as environment variable for seamless authentication
+os.environ["WANDB_API_KEY"] = "v1_YeYEEYKmT7xuUEU08gaNamt0pdf_ZyxllDg34fFDkGdsvOiWm8XLX2NgZZIfn6oZdKm9JUl0vMfPe"
 
 
 class WandbLogger:
