@@ -31,7 +31,7 @@ def build_manifests(project_root=None):
             if filepath.suffix.lower() not in ['.edf', '.bdf', '.vhdr', '.mat', '.set']:
                 continue
             
-            # 1. Chisco Dataset (1 file = 1 trial for .edf files)
+                # 1. Chisco Dataset (1 file = 1 trial for .edf files)
             if dataset == "chisco":
                 trial_id = filepath.stem
                 # Try to parse sub-XX and ses-YY from filename
@@ -41,6 +41,27 @@ def build_manifests(project_root=None):
                 ses = next((p for p in parts if p.startswith("ses-")), "ses-unk")
                 task = next((p for p in parts if p.startswith("task-")), "task-unk").replace("task-", "")
                 run = next((p for p in parts if p.startswith("run-")), "run-unk")
+                
+                # The run number (e.g., 037) maps to the specific sentence stimulus/category.
+                # Use the run number as the initial classification label to enable learning.
+                label_val = run.replace("run-", "")
+                if label_val.isdigit():
+                    label_val = int(label_val)
+                
+                text_str = ""
+                # Try to load the text from the downloaded textdataset
+                text_path = project_root / "ds005170-1.1.2" / "textdataset" / f"split_data_{label_val}.xlsx"
+                if text_path.exists():
+                    try:
+                        xlsx_df = pd.read_excel(text_path)
+                        # We try to find the longest string in the first row, or column named "Sentence"/"Text"
+                        text_str = str(xlsx_df.iloc[0, 0]) # Best effort default
+                        for col in xlsx_df.columns:
+                            if any(x in str(col).lower() for x in ["text", "sentence", "stimuli", "word"]):
+                                text_str = str(xlsx_df[col].iloc[0])
+                                break
+                    except Exception as e:
+                        logger.warning(f"Failed to read {text_path}: {e}")
                 
                 rows.append({
                     "trial_id": f"chisco_{sub}_{ses}_{run}",
@@ -52,6 +73,8 @@ def build_manifests(project_root=None):
                     "onset": 0.0,
                     "duration": -1.0,
                     "trial_type": "imagined_speech",
+                    "label": label_val,
+                    "text": text_str,
                     "raw_metadata": "{}",
                     "split": "train" # Default to train, user can split later
                 })
@@ -68,6 +91,12 @@ def build_manifests(project_root=None):
                             onset = float(ev["onset"])
                             duration = float(ev.get("duration", -1.0))
                             trial_type = ev.get("trial_type", "unknown")
+                            
+                            # Thinking Out Loud has 4 directional commands. 
+                            # We extract it from 'value' or 'trial_type' to establish the classification label.
+                            label_val = ev.get("value", trial_type)
+                            text_str = str(label_val).lower().replace("imagined", "").strip()
+                            
                             rows.append({
                                 "trial_id": f"tol_{filepath.stem}_trial{idx}",
                                 "subject_id": sub,
@@ -78,6 +107,8 @@ def build_manifests(project_root=None):
                                 "onset": onset,
                                 "duration": duration,
                                 "trial_type": trial_type,
+                                "label": label_val,
+                                "text": text_str,
                                 "raw_metadata": "{}",
                                 "split": "train"
                             })
@@ -95,6 +126,7 @@ def build_manifests(project_root=None):
                         "onset": 0.0,
                         "duration": -1.0,
                         "trial_type": "continuous",
+                        "text": "",
                         "raw_metadata": "{}",
                         "split": "train"
                     })
@@ -122,6 +154,8 @@ def build_manifests(project_root=None):
                                     "onset": 0.0,
                                     "duration": -1.0,
                                     "trial_type": "sentence",
+                                    "label": i,
+                                    "text": "", # Zuco text parsing requires H5 deep dive, stub for now
                                     "raw_metadata": "{}",
                                     "split": "train"
                                 })
@@ -137,6 +171,7 @@ def build_manifests(project_root=None):
                         "onset": 0.0,
                         "duration": -1.0,
                         "trial_type": "continuous",
+                        "text": "",
                         "raw_metadata": "{}",
                         "split": "train"
                     })

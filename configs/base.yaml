@@ -76,14 +76,14 @@ training:
     monitor: val_balanced_accuracy
     mode: max
   label_smoothing: 0.1
-  # Loss weights (multi-task)
+  # Loss weights (multi-task) — Phase 1: classification + contrastive
   loss_weights:
-    cls: 1.0
-    contrast: 0.5
-    ctc: 0.3
-    gen: 1.0
-    retrieval: 0.5
-    rl: 0.1
+    cls: 1.0         # primary objective
+    contrast: 0.3    # SupCon on retrieval embeddings (direct encoder reward)
+    ctc: 0.0         # OFF until Phase 2 (decoder not trained)
+    gen: 0.0         # OFF until Phase 2
+    retrieval: 0.5   # reserved for InfoNCE with text encoder
+    rl: 0.0          # OFF until Phase 3 (SCST fine-tuning)
 
 # ──── Evaluation defaults ────
 evaluation:

@@ -1,0 +1,183 @@
+seed: 42
+device: auto
+precision: fp32
+num_workers: 4
+pin_memory: true
+project_name: neurograph-conformer-rl
+wandb:
+  enabled: false
+  project: neurograph-conformer-rl
+  entity: null
+  tags: []
+project:
+  name: neurograph-conformer-rl
+  root: .
+  data_dir: data
+  results_dir: results
+  experiments_dir: experiments
+preprocessing:
+  target_srate: 250
+  bandpass_low: 0.5
+  bandpass_high: 100.0
+  notch_freq: null
+  filter_method: fir
+  epoch_tmin: 0.0
+  epoch_tmax: 2.0
+  baseline_tmin: -0.5
+  baseline_tmax: 0.0
+  amplitude_threshold: 100.0
+  artifact_method: ica
+  ica_n_components: null
+  ica_max_remove: 3
+  normalization: zscore
+  norm_scope: per_session
+  reference: car
+features:
+  method: cwt
+  cwt_freqs_min: 1
+  cwt_freqs_max: 100
+  cwt_freqs_step: 1
+  cwt_n_cycles_mode: adaptive
+  cwt_n_cycles_fixed: 7
+  cwt_time_downsample: 4
+  filterbank_bands:
+    delta:
+    - 0.5
+    - 4
+    theta:
+    - 4
+    - 8
+    alpha:
+    - 8
+    - 13
+    beta:
+    - 13
+    - 30
+    low_gamma:
+    - 30
+    - 50
+    high_gamma:
+    - 50
+    - 100
+  filterbank_window_s: 0.5
+  filterbank_stride_s: 0.125
+  channel_strategy: region_pooling
+  n_regions: 9
+training:
+  batch_size: 32
+  max_epochs: 200
+  lr: 0.001
+  weight_decay: 0.0001
+  optimizer: adamw
+  scheduler: cosine_warmup
+  warmup_epochs: 10
+  min_lr: 1.0e-06
+  gradient_clip_val: 1.0
+  early_stopping:
+    enabled: true
+    patience: 30
+    monitor: val_balanced_accuracy
+    mode: max
+  label_smoothing: 0.1
+  loss_weights:
+    cls: 1.0
+    contrast: 0.5
+    ctc: 0.3
+    gen: 1.0
+    retrieval: 0.5
+    rl: 0.1
+evaluation:
+  metrics:
+  - balanced_accuracy
+  - macro_f1
+  - top_k_accuracy
+  - confusion_matrix
+  top_k:
+  - 3
+  - 5
+  statistical_test: wilcoxon
+  confidence_level: 0.95
+  n_seeds: 5
+logging:
+  level: INFO
+  log_dir: logs
+  wandb:
+    enabled: false
+    project: neurograph-conformer-rl
+    entity: null
+    tags: []
+dataset:
+  name: thinking_out_loud
+  version: '1.0'
+  source_url: https://openneuro.org/datasets/ds003626
+  language: en
+  cognitive_task: inner_speech
+  stimulus_modality: visual_cue
+  original_srate: 128
+  n_channels_original: 14
+  montage: emotiv_epoc
+  n_subjects: 15
+  tasks_supported:
+  - T2
+  label_type: command
+  n_classes: 4
+  classes:
+  - up
+  - down
+  - left
+  - right
+  conditions:
+  - inner_speech
+  - pronounced
+  - visualized
+  raw_dir: raw/thinking_out_loud
+  processed_dir: processed/thinking_out_loud
+  preprocessing:
+    notch_freq: 50
+    epoch_tmin: 0.0
+    epoch_tmax: 2.0
+  hardware_notes:
+  - Consumer-grade EEG (Emotiv EPOC)
+  - No central electrodes (C3/C4/Cz) — sensorimotor information unavailable
+  - 14 channels only — severe spatial limitation
+  - 128 Hz sampling — frequency content above 64 Hz is unreliable
+  - Built-in hardware filters may affect signal
+  provider_preprocessing:
+    bandpass_low: 1.0
+    bandpass_high: 45.0
+    notch_freq: 50
+    reference: built_in
+    artifact_method: threshold
+model:
+  name: conformer_small
+  type: proposed
+  variant: small
+  frontend:
+    type: filterbank
+    learnable: true
+    n_bands: 6
+    output_type: logpower
+  spatial:
+    type: region_pooling
+    n_regions: 9
+    pooling: attention
+    d_model: 64
+  encoder:
+    type: conformer
+    d_model: 64
+    n_layers: 2
+    n_heads: 4
+    d_ff: 256
+    conv_kernel_size: 15
+    dropout: 0.2
+    attention_dropout: 0.1
+  mamba:
+    enabled: false
+  decoder:
+    enabled: false
+  heads:
+    classification:
+      type: linear
+      dropout: 0.3
+      n_classes: null
+  estimated_params_M: 0.5

@@ -1,0 +1,25 @@
+# Phase 3: RL SCST Fine-tuning
+# Objective: Fine-tune decoder using SCST to optimize metrics like Semantic Similarity/WER.
+model:
+  decoder:
+    enabled: true
+
+training:
+  max_epochs: 50
+  lr: 0.00001 # Very low LR for RL fine-tuning
+  loss_weights:
+    cls: 0.0
+    contrast: 0.0
+    ctc: 0.0
+    gen: 0.0
+    rl: 1.0
+  rl:
+    method: scst
+    reward:
+      semantic_similarity:
+        weight: 1.0
+        encoder: paraphrase-multilingual-MiniLM-L12-v2
+      wer:
+        weight: 0.0
+      cer:
+        weight: 0.0

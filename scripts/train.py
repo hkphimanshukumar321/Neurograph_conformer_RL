@@ -107,7 +107,48 @@ def main():
         logger.error(f"No samples found for {args.dataset} in {manifest_path}")
         return
 
-    # Split 80/20
+    # ── Tokenizer ──
+    from src.datasets.tokenizer import Tokenizer
+    tokenizer = None
+    vocab_size = None
+
+    decoder_cfg = cfg.model.get("decoder", cfg.model.get("arch", {}).get("decoder", {}))
+    if decoder_cfg.get("enabled", False):
+        gen_cfg = cfg.model.get("heads", cfg.model.get("arch", {}).get("heads", {})).get("generation", {})
+        if base_cfg.training.get("loss_weights", {}).get("gen", 0) > 0 or base_cfg.training.get("loss_weights", {}).get("rl", 0) > 0:
+            logger.info("Initializing Tokenizer for Generation/RL...")
+            tokenizer_loaded = False
+            if args.pretrained:
+                pretrained_dir = Path(args.pretrained).parent
+                # if pretrained is just "best.pt", parent is "."
+                # check if tokenizer.json is near it or in its parent (experiments/phase2)
+                tok_path = pretrained_dir / "tokenizer.json"
+                if not tok_path.exists():
+                    # sometimes pretrained is experiments/exp_name/checkpoints/best.pt
+                    tok_path = pretrained_dir.parent / "tokenizer.json"
+                    
+                if tok_path.exists():
+                    logger.info(f"Loading tokenizer from {tok_path}")
+                    tokenizer = Tokenizer.load(tok_path)
+                    vocab_size = tokenizer.vocab_size
+                    tokenizer_loaded = True
+            
+            if not tokenizer_loaded:
+                tokenizer = Tokenizer(mode="char" if args.dataset == "chisco" else "word")
+                texts = [item["text"] for item in full_dataset.df.to_dict("records")]
+                tokenizer.fit(texts)
+                vocab_size = tokenizer.vocab_size
+                logger.info(f"Tokenizer fitted with vocab_size={vocab_size}")
+                
+            tokenizer.save(exp_dir / "tokenizer.json")
+            
+            # Update dataset to use tokenizer
+            full_dataset.tokenizer = tokenizer
+        else:
+            logger.info("Generation head config found but generation/RL weights are 0 — skipping generation head (Phase 1)")
+
+    # ── Split Dataset ──
+    # ... previous split code ...
     val_size = int(0.2 * len(full_dataset))
     train_size = len(full_dataset) - val_size
     train_dataset, val_dataset = torch.utils.data.random_split(
@@ -115,12 +156,14 @@ def main():
         generator=torch.Generator().manual_seed(args.seed)
     )
 
+    from src.datasets.manifest import collate_fn
     train_loader = DataLoader(
         train_dataset,
         batch_size=cfg.training.batch_size,
         shuffle=True,
         num_workers=4,
         pin_memory=True,
+        collate_fn=collate_fn,
     )
     val_loader = DataLoader(
         val_dataset,
@@ -128,6 +171,7 @@ def main():
         shuffle=False,
         num_workers=4,
         pin_memory=True,
+        collate_fn=collate_fn,
     )
 
     logger.info(f"Loaded {train_size} training samples, {val_size} validation samples.")
@@ -149,10 +193,21 @@ def main():
             n_channels=n_channels,
             n_samples=n_samples,
             n_classes=n_classes,
+            vocab_size=vocab_size,
         )
 
     total_params = sum(p.numel() for p in model.parameters()) / 1e6
     logger.info(f"Model parameters: {total_params:.2f}M")
+    
+    # Log active heads
+    if hasattr(model, 'classification_heads'):
+        logger.info(f"  Classification heads: {list(model.classification_heads.keys())}")
+    if hasattr(model, 'retrieval_head') and model.retrieval_head is not None:
+        logger.info(f"  Retrieval head: ACTIVE")
+    if hasattr(model, 'generation_head') and model.generation_head is not None:
+        logger.info(f"  Generation head: ACTIVE")
+    else:
+        logger.info(f"  Generation head: INACTIVE (Phase 1)")
 
     # ── Load pretrained (optional) ──
     if args.pretrained:
@@ -185,6 +240,7 @@ def main():
         device=args.device,
         experiment_dir=exp_dir,
         logger_obj=wb_logger,
+        tokenizer=tokenizer,
     )
     history = trainer.fit()
     
@@ -197,9 +253,15 @@ def main():
 
     # ── Generate plots ──
     try:
-        from src.evaluation.visualization import plot_training_curves, plot_confusion_matrix
+        from src.evaluation.visualization import (
+            plot_training_curves,
+            plot_confusion_matrix,
+            plot_multitask_losses,
+            plot_reward_curves,
+        )
         import numpy as np
 
+        # 1. Standard training curves (loss + accuracy)
         plot_training_curves(
             history,
             title=f"{args.experiment} — Training History",
@@ -207,7 +269,24 @@ def main():
         )
         logger.info(f"Training curves saved to {exp_dir / 'training_curves.png'}")
 
-        # Confusion matrix from saved predictions
+        # 2. Multi-task loss breakdown (cls vs contrastive vs total)
+        plot_multitask_losses(
+            history,
+            title=f"{args.experiment} — Multi-Task Loss Breakdown",
+            save_path=exp_dir / "multitask_losses.png",
+        )
+        logger.info(f"Multi-task loss plot saved to {exp_dir / 'multitask_losses.png'}")
+
+        # 3. RL reward curves (only if RL was active)
+        if any(len(history.get(k, [])) > 0 for k in ["rl_greedy_reward", "rl_sample_reward"]):
+            plot_reward_curves(
+                history,
+                title=f"{args.experiment} — RL Reward Progress",
+                save_path=exp_dir / "rl_reward_curves.png",
+            )
+            logger.info(f"RL reward curves saved to {exp_dir / 'rl_reward_curves.png'}")
+
+        # 4. Confusion matrix from saved predictions
         npz_path = exp_dir / "val_predictions.npz"
         if npz_path.exists():
             data = np.load(npz_path)
