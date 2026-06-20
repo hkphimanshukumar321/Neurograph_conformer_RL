@@ -103,7 +103,7 @@ class Trainer:
 
         self.rl_trainer = None
         if self.has_generation and self.loss_weights["rl"] > 0:
-            rl_cfg = self.cfg.training.get("rl", {})
+            rl_cfg = self.cfg.get("model", {}).get("rl", {})
             self.rl_trainer = RLTrainer(self.model, rl_cfg, self.device)
 
         # ── Optimizer ──
@@ -212,6 +212,9 @@ class Trainer:
         total_contrast_loss = 0.0
         total_gen_loss = 0.0
         total_rl_loss = 0.0
+        total_greedy_reward = 0.0
+        total_sample_reward = 0.0
+        total_advantage = 0.0
         correct = 0
         total = 0
 
@@ -313,6 +316,9 @@ class Trainer:
                 pass
             if "rl_loss" in rl_metrics:
                 total_rl_loss += rl_metrics["rl_loss"] * bs
+                total_greedy_reward += rl_metrics.get("greedy_reward", 0.0) * bs
+                total_sample_reward += rl_metrics.get("sample_reward", 0.0) * bs
+                total_advantage += rl_metrics.get("advantage", 0.0) * bs
                 
             preds = cls_logits.argmax(dim=-1)
             correct += (preds == labels).sum().item()
@@ -341,6 +347,10 @@ class Trainer:
             metrics["train_gen_loss"] = total_gen_loss / total
         if self.loss_weights["rl"] > 0:
             metrics["train_rl_loss"] = total_rl_loss / total
+            metrics["rl_loss"] = total_rl_loss / total
+            metrics["rl_greedy_reward"] = total_greedy_reward / total
+            metrics["rl_sample_reward"] = total_sample_reward / total
+            metrics["rl_advantage"] = total_advantage / total
             
         return metrics
 

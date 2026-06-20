@@ -115,7 +115,7 @@ def main():
     decoder_cfg = cfg.model.get("decoder", cfg.model.get("arch", {}).get("decoder", {}))
     if decoder_cfg.get("enabled", False):
         gen_cfg = cfg.model.get("heads", cfg.model.get("arch", {}).get("heads", {})).get("generation", {})
-        if base_cfg.training.get("loss_weights", {}).get("gen", 0) > 0 or base_cfg.training.get("loss_weights", {}).get("rl", 0) > 0:
+        if cfg.training.get("loss_weights", {}).get("gen", 0) > 0 or cfg.training.get("loss_weights", {}).get("rl", 0) > 0:
             logger.info("Initializing Tokenizer for Generation/RL...")
             tokenizer_loaded = False
             if args.pretrained:
