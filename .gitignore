@@ -17,26 +17,17 @@ env/
 data/raw/
 data/processed/
 data/splits/
-data/cache/
-data/external/
 *.npy
 *.npz
 *.h5
 *.hdf5
-*.mat
 *.fif
 *.edf
 *.set
 *.fdt
 *.bdf
 *.gdf
-*.pkl
-*.pickle
-*.zip
 
-# ──── Dataset downloads ────
-ds003626-2.1.2/
-ds005170-1.1.2/
 # ──── Results / Checkpoints ────
 results/checkpoints/
 results/figures/
@@ -71,3 +62,5 @@ Thumbs.db
 *.log
 *.tmp
 .env
+experiments
+pipeline.log

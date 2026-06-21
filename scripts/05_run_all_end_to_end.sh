@@ -1,5 +1,8 @@
 #!/bin/bash
 # Master Script: Run all training phases sequentially
+
+#nohup bash scripts/05_run_all_end_to_end.sh Multiclass_Full_Run within_subject > pipeline.log 2>&1 &
+
 set -e
 
 DATASET=${1:-"chisco"}

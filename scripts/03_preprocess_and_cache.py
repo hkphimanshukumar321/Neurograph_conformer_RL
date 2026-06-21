@@ -204,8 +204,8 @@ def main():
     # CPU preprocessing can use ~4-8GB RAM per worker for massive EEG files.
     max_cores = multiprocessing.cpu_count()
     if args.jobs == -1:
-        # Default guardrail: use half the available cores to prevent system memory from hitting 100%
-        n_jobs = max(1, max_cores // 2) 
+        # Default guardrail: limit to 8 workers max to prevent massive RAM usage
+        n_jobs = min(8, max(1, max_cores // 4))
         logger.info(f"Auto-configured n_jobs={n_jobs} (of {max_cores} total cores) as an OOM guardrail.")
     else:
         n_jobs = min(args.jobs, max_cores)
