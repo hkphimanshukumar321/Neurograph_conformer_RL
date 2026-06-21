@@ -223,6 +223,7 @@ def main():
     logger.info(f"Test metrics: {test_metrics}")
     
     # Save test predictions
+    import numpy as np
     if hasattr(trainer, "_last_test_preds"):
         np.savez(
             exp_dir / "test_predictions.npz",
