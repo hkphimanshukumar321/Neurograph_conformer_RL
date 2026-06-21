@@ -49,7 +49,9 @@ class RewardComputer:
     def _get_semantic_encoder(self):
         if self._sem_encoder is None:
             from sentence_transformers import SentenceTransformer
-            self._sem_encoder = SentenceTransformer(self._sem_model_name)
+            # Force CPU to avoid CUDA library version mismatches (e.g. libcudart.so.13)
+            # in containers. Reward computation is on short strings so CPU is fast enough.
+            self._sem_encoder = SentenceTransformer(self._sem_model_name, device="cpu")
         return self._sem_encoder
 
     def compute(

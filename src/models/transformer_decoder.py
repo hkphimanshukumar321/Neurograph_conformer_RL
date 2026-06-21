@@ -196,7 +196,6 @@ class TransformerDecoder(nn.Module):
 
         return generated
 
-    @torch.no_grad()
     def sample_decode(
         self,
         memory: torch.Tensor,
