@@ -102,7 +102,7 @@ logging:
   level: INFO
   log_dir: logs
   wandb:
-    enabled: false
+    enabled: true
     project: neurograph-conformer-rl
     entity: null
     tags: []

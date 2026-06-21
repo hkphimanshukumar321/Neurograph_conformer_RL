@@ -359,16 +359,27 @@ class Trainer:
     # ──────────────────────────────────────────────────────────────
 
     @torch.no_grad()
-    def validate(self) -> dict[str, float]:
-        """Run validation with multi-task metrics.
+    def validate(self, loader: DataLoader | None = None, prefix: str = "val", desc: str | None = None) -> dict[str, float]:
+        """Run validation or testing with multi-task metrics.
+
+        Parameters
+        ----------
+        loader : DataLoader, optional
+            Data loader to evaluate. Defaults to self.val_loader.
+        prefix : str
+            Prefix for metric keys (e.g., 'val', 'test').
+        desc : str, optional
+            Description for progress bar.
 
         Returns
         -------
         dict[str, float]
-            Validation metrics including classification, contrastive,
-            and embedding quality.
+            Evaluation metrics.
         """
         self.model.eval()
+        if loader is None:
+            loader = self.val_loader
+            
         total_loss = 0.0
         total_cls_loss = 0.0
         total_contrast_loss = 0.0
@@ -377,9 +388,13 @@ class Trainer:
         all_embeddings = []
 
         from tqdm import tqdm
+        
+        if desc is None:
+            desc = f"Epoch {self.current_epoch + 1} {prefix.capitalize()}"
+            
         pbar = tqdm(
-            self.val_loader,
-            desc=f"Epoch {self.current_epoch + 1} Val",
+            loader,
+            desc=desc,
             leave=False,
         )
 
@@ -464,17 +479,21 @@ class Trainer:
                 logger.debug(f"Silhouette score computation failed: {e}")
 
         # Store raw predictions for confusion matrix generation
-        self._last_val_preds = all_preds.numpy()
-        self._last_val_labels = all_labels.numpy()
+        if prefix == "val":
+            self._last_val_preds = all_preds.numpy()
+            self._last_val_labels = all_labels.numpy()
+        elif prefix == "test":
+            self._last_test_preds = all_preds.numpy()
+            self._last_test_labels = all_labels.numpy()
 
         metrics = {
-            "val_loss": total_loss / n,
-            "val_cls_loss": total_cls_loss / n,
-            "val_contrast_loss": total_contrast_loss / n,
-            "val_accuracy": accuracy,
-            "val_balanced_accuracy": balanced_acc,
-            "val_macro_f1": macro_f1,
-            "val_silhouette_score": silhouette,
+            f"{prefix}_loss": total_loss / n,
+            f"{prefix}_cls_loss": total_cls_loss / n,
+            f"{prefix}_contrast_loss": total_contrast_loss / n,
+            f"{prefix}_accuracy": accuracy,
+            f"{prefix}_balanced_accuracy": balanced_acc,
+            f"{prefix}_macro_f1": macro_f1,
+            f"{prefix}_silhouette_score": silhouette,
         }
         return metrics
 

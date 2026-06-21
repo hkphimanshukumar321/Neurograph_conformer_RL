@@ -124,11 +124,12 @@ def main():
         logger.error(f"No samples found for {args.dataset} in {manifest_path}")
         return
 
-    # Split 80/20
-    val_size = int(0.2 * len(full_dataset))
-    train_size = len(full_dataset) - val_size
-    train_dataset, val_dataset = torch.utils.data.random_split(
-        full_dataset, [train_size, val_size],
+    # Split 80/10/10
+    test_size = int(0.1 * len(full_dataset))
+    val_size = int(0.1 * len(full_dataset))
+    train_size = len(full_dataset) - val_size - test_size
+    train_dataset, val_dataset, test_dataset = torch.utils.data.random_split(
+        full_dataset, [train_size, val_size, test_size],
         generator=torch.Generator().manual_seed(args.seed)
     )
 
@@ -146,8 +147,15 @@ def main():
         num_workers=4,
         pin_memory=True,
     )
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=cfg.training.batch_size,
+        shuffle=False,
+        num_workers=4,
+        pin_memory=True,
+    )
 
-    logger.info(f"Loaded {train_size} training samples, {val_size} validation samples.")
+    logger.info(f"Loaded {train_size} train, {val_size} val, {test_size} test samples.")
     logger.info(f"Classes: {full_dataset.n_classes}")
 
     # ── Build model ──
@@ -207,6 +215,23 @@ def main():
     
     if wb_logger is not None:
         wb_logger.finish()
+        
+    # ── Evaluate on Test Set ──
+    logger.info("Loading best model for test set evaluation...")
+    trainer.load_checkpoint(exp_dir / "checkpoints" / "best.pt")
+    test_metrics = trainer.validate(loader=test_loader, prefix="test")
+    logger.info(f"Test metrics: {test_metrics}")
+    
+    # Save test predictions
+    if hasattr(trainer, "_last_test_preds"):
+        np.savez(
+            exp_dir / "test_predictions.npz",
+            preds=trainer._last_test_preds,
+            labels=trainer._last_test_labels,
+        )
+        logger.info(f"Saved test predictions to {exp_dir / 'test_predictions.npz'}")
+        
+    history["test_metrics"] = test_metrics
     
     # ── Stage 4: RL fine-tuning (optional) ──
     if args.stage == 4:
@@ -272,18 +297,19 @@ def main():
         logger.info(f"Training curves saved to {exp_dir / 'training_curves.png'}")
 
         # Confusion matrix from saved predictions
-        npz_path = exp_dir / "val_predictions.npz"
-        if npz_path.exists():
-            data = np.load(npz_path)
-            from sklearn.metrics import confusion_matrix as cm_func
-            cm = cm_func(data["labels"], data["preds"])
-            class_names = [str(i) for i in range(cm.shape[0])]
-            plot_confusion_matrix(
-                cm, class_names,
-                title=f"{args.experiment} — Confusion Matrix (Stage {args.stage})",
-                save_path=exp_dir / "confusion_matrix.png",
-            )
-            logger.info(f"Confusion matrix saved to {exp_dir / 'confusion_matrix.png'}")
+        for split in ["val", "test"]:
+            npz_path = exp_dir / f"{split}_predictions.npz"
+            if npz_path.exists():
+                data = np.load(npz_path)
+                from sklearn.metrics import confusion_matrix as cm_func
+                cm = cm_func(data["labels"], data["preds"])
+                class_names = [str(i) for i in range(cm.shape[0])]
+                plot_confusion_matrix(
+                    cm, class_names,
+                    title=f"{args.experiment} — Confusion Matrix ({split}) (Stage {args.stage})",
+                    save_path=exp_dir / f"confusion_matrix_{split}.png",
+                )
+                logger.info(f"Confusion matrix ({split}) saved to {exp_dir / f'confusion_matrix_{split}.png'}")
     except Exception as e:
         logger.warning(f"Could not generate plots: {e}")
 
