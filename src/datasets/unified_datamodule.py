@@ -44,29 +44,31 @@ class UnifiedEEGDataset(Dataset):
 
 def collate_fn(batch: List[Tuple[torch.Tensor, int]]) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
-    Pads a batch of EEG tensors to the maximum length in the batch.
+    Pads a batch of EEG tensors to the maximum length and maximum channels in the batch.
     Returns:
-        batch_x: (B, C, T_max)
+        batch_x: (B, max_c, T_max)
         attention_mask: (B, T_max) boolean mask where True indicates REAL data, False indicates PADDING
         labels: (B,)
     """
     xs, labels = zip(*batch)
     
-    # xs is a list of tensors of shape (C, T_i)
+    # xs is a list of tensors of shape (C_i, T_i)
     lengths = [x.shape[1] for x in xs]
     max_len = max(lengths)
     
-    C = xs[0].shape[0]
+    channels = [x.shape[0] for x in xs]
+    max_c = max(channels)
+    
     B = len(xs)
     
-    batch_x = torch.zeros(B, C, max_len, dtype=torch.float32)
+    batch_x = torch.zeros(B, max_c, max_len, dtype=torch.float32)
     # Mask is True for actual data, False for padding
     attention_mask = torch.zeros(B, max_len, dtype=torch.bool)
     
     for i, x in enumerate(xs):
-        T = lengths[i]
-        batch_x[i, :, :T] = x
-        attention_mask[i, :T] = True
+        c, t = x.shape
+        batch_x[i, :c, :t] = x
+        attention_mask[i, :t] = True
         
     return batch_x, attention_mask, torch.tensor(labels, dtype=torch.long)
 

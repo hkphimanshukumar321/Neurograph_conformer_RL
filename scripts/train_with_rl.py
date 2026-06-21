@@ -243,8 +243,21 @@ def main():
             logger.info("Current implementation provides reward computation framework for SCST, MWER, PPO.")
 
     # ── Save results ──
+    import numpy as np
+    class NumpyEncoder(json.JSONEncoder):
+        def default(self, obj):
+            if isinstance(obj, np.ndarray):
+                return obj.tolist()
+            if isinstance(obj, np.floating):
+                return float(obj)
+            if isinstance(obj, np.integer):
+                return int(obj)
+            if isinstance(obj, torch.Tensor):
+                return obj.tolist()
+            return super().default(obj)
+
     with open(exp_dir / "history.json", "w") as f:
-        json.dump(history, f, indent=2)
+        json.dump(history, f, indent=2, cls=NumpyEncoder)
 
     # ── Generate plots ──
     try:
