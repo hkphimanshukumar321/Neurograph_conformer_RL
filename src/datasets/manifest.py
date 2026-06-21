@@ -188,9 +188,23 @@ class ManifestDataset(Dataset):
 
 
 def collate_fn(batch: list[dict]) -> dict:
-    """Custom collate to pad target_tokens correctly."""
+    """Custom collate to pad target_tokens correctly and handle variable EEG channels."""
+    
+    # Handle variable EEG channels by padding to max_c in the batch
+    eegs = [item["eeg"] for item in batch]
+    max_c = max(eeg.shape[0] for eeg in eegs)
+    
+    padded_eegs = []
+    for eeg in eegs:
+        c, t = eeg.shape
+        if c < max_c:
+            pad = torch.zeros(max_c - c, t, dtype=eeg.dtype)
+            padded_eegs.append(torch.cat([eeg, pad], dim=0))
+        else:
+            padded_eegs.append(eeg)
+            
     collated = {
-        "eeg": torch.stack([item["eeg"] for item in batch]),
+        "eeg": torch.stack(padded_eegs),
         "label": torch.stack([item["label"] for item in batch]),
         "text": [item["text"] for item in batch],
         "dataset": [item["dataset"] for item in batch],
