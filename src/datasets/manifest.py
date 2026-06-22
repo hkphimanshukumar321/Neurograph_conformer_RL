@@ -196,7 +196,12 @@ class ManifestDataset(Dataset):
         weights = torch.zeros(self.n_classes)
         for raw_lab, count in counts.items():
             lab_idx = self.label_str_to_int[str(raw_lab)]
-            weights[lab_idx] = total / (self.n_classes * count)
+            # Use sqrt inverse frequency and clamp to avoid extreme dominance
+            w = np.sqrt(total / (self.n_classes * count))
+            weights[lab_idx] = w
+            
+        # Clamp to reasonable range
+        weights = torch.clamp(weights, min=0.1, max=10.0)
         return weights
 
 
