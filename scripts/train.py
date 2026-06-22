@@ -153,14 +153,43 @@ def main():
         else:
             logger.info("Generation head config found but generation/RL weights are 0 — skipping generation head (Phase 1)")
 
-    # ── Split Dataset ──
-    test_size = int(0.1 * len(full_dataset))
-    val_size = int(0.1 * len(full_dataset))
-    train_size = len(full_dataset) - val_size - test_size
-    train_dataset, val_dataset, test_dataset = torch.utils.data.random_split(
-        full_dataset, [train_size, val_size, test_size],
-        generator=torch.Generator().manual_seed(args.seed)
-    )
+    # ── Split Dataset (Stratified) ──
+    # Use stratified splitting to ensure each class appears in train/val/test
+    from sklearn.model_selection import StratifiedShuffleSplit
+    import numpy as np
+
+    all_labels_for_split = []
+    for i in range(len(full_dataset)):
+        row = full_dataset.df.iloc[i]
+        label_col = full_dataset._label_col
+        if label_col and label_col in row.index:
+            raw_lab = str(row[label_col])
+            all_labels_for_split.append(full_dataset.label_str_to_int.get(raw_lab, 0))
+        else:
+            all_labels_for_split.append(0)
+    all_labels_for_split = np.array(all_labels_for_split)
+
+    # First split: separate test set (10%)
+    sss_test = StratifiedShuffleSplit(n_splits=1, test_size=0.1, random_state=args.seed)
+    train_val_idx, test_idx = next(sss_test.split(np.zeros(len(all_labels_for_split)), all_labels_for_split))
+
+    # Second split: separate val from train (10% of original = ~11% of train_val)
+    val_frac = 0.1 / 0.9  # adjust fraction since we're splitting from 90%
+    sss_val = StratifiedShuffleSplit(n_splits=1, test_size=val_frac, random_state=args.seed)
+    train_idx, val_idx = next(sss_val.split(
+        np.zeros(len(train_val_idx)), all_labels_for_split[train_val_idx]
+    ))
+    # Map back to original indices
+    train_idx = train_val_idx[train_idx]
+    val_idx = train_val_idx[val_idx]
+
+    train_dataset = torch.utils.data.Subset(full_dataset, train_idx.tolist())
+    val_dataset = torch.utils.data.Subset(full_dataset, val_idx.tolist())
+    test_dataset = torch.utils.data.Subset(full_dataset, test_idx.tolist())
+
+    train_size = len(train_dataset)
+    val_size = len(val_dataset)
+    test_size = len(test_dataset)
 
     from src.datasets.manifest import collate_fn
     train_loader = DataLoader(
@@ -190,6 +219,15 @@ def main():
 
     logger.info(f"Loaded {train_size} train, {val_size} val, {test_size} test samples.")
     logger.info(f"Classes: {full_dataset.n_classes}")
+    # Log class distribution
+    if hasattr(full_dataset, 'label_int_to_str') and hasattr(full_dataset, '_label_col'):
+        label_col = full_dataset._label_col
+        if label_col and label_col in full_dataset.df.columns:
+            counts = full_dataset.df[label_col].value_counts()
+            logger.info(f"Class distribution:")
+            for lab, count in counts.items():
+                idx = full_dataset.label_str_to_int.get(str(lab), '?')
+                logger.info(f"  [{idx}] {lab}: {count} samples ({100*count/len(full_dataset):.1f}%)")
 
     # ── Build model ──
     from src.models.baselines import BASELINE_REGISTRY
@@ -249,6 +287,20 @@ def main():
             tags=[args.dataset, cfg.model.name]
         )
 
+    # ── Compute class weights for balanced training ──
+    class_weights = None
+    if hasattr(full_dataset, 'get_class_weights'):
+        class_weights = full_dataset.get_class_weights()
+        logger.info(f"Class weights computed: {class_weights.tolist()[:5]}{'...' if len(class_weights) > 5 else ''}")
+
+    # ── Compute adjacency matrix from electrode positions ──
+    adjacency = None
+    spatial_type = cfg.model.get("spatial", cfg.model.get("arch", {}).get("spatial", {})).get("type", "none")
+    if spatial_type == "graph":
+        from src.utils.electrode_positions import compute_adjacency_for_batch
+        adjacency = compute_adjacency_for_batch(n_channels, device="cpu")
+        logger.info(f"Pre-computed adjacency matrix: shape={adjacency.shape}")
+
     trainer = Trainer(
         model=model,
         cfg=cfg,
@@ -258,6 +310,8 @@ def main():
         experiment_dir=exp_dir,
         logger_obj=wb_logger,
         tokenizer=tokenizer,
+        class_weights=class_weights,
+        adjacency=adjacency,
     )
     history = trainer.fit()
     
@@ -341,7 +395,10 @@ def main():
                 data = np.load(npz_path)
                 from sklearn.metrics import confusion_matrix as cm_func
                 cm = cm_func(data["labels"], data["preds"])
-                class_names = [str(i) for i in range(cm.shape[0])]
+                class_names = [
+                    full_dataset.label_int_to_str.get(i, str(i))
+                    for i in range(cm.shape[0])
+                ] if hasattr(full_dataset, 'label_int_to_str') else [str(i) for i in range(cm.shape[0])]
                 plot_confusion_matrix(
                     cm, class_names,
                     title=f"{args.experiment} — Confusion Matrix ({split})",

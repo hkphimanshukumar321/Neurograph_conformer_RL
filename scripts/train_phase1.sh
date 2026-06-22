@@ -1,5 +1,12 @@
 #!/bin/bash
 # Phase 1: Pre-train Encoder
+# 
+# Fixes applied:
+#   - Uses conformer_medium (5M params) instead of neurograph_full (25M) 
+#     to match the ~5K sample dataset size
+#   - Disables contrastive loss for initial stability (needs class-balanced batching)
+#   - Increases dropout and reduces LR for small-data regime
+#   - Decoder disabled (classification-only phase)
 set -e
 
 DATASET=${1:-"chisco"}
@@ -13,10 +20,21 @@ echo "Experiment: $EXP_NAME"
 echo "======================================"
 
 python scripts/train.py \
-    --config configs/models/neurograph_full.yaml \
+    --config configs/models/conformer_medium.yaml \
     --dataset $DATASET \
     --protocol $PROTOCOL \
     --experiment $EXP_NAME \
-    --overrides "training.loss_weights.cls=1.0" "training.loss_weights.contrast=0.3" "training.loss_weights.gen=0.0" "training.loss_weights.rl=0.0" "model.decoder.enabled=false"
+    --overrides \
+        "training.loss_weights.cls=1.0" \
+        "training.loss_weights.contrast=0.3" \
+        "training.loss_weights.gen=0.0" \
+        "training.loss_weights.rl=0.0" \
+        "training.batch_size=64" \
+        "training.lr=5e-4" \
+        "training.max_epochs=200" \
+        "training.early_stopping.patience=30" \
+        "training.label_smoothing=0.1" \
+        "model.encoder.dropout=0.3" \
+        "model.decoder.enabled=false"
 
 echo "Phase 1 Complete."

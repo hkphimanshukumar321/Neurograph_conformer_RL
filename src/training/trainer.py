@@ -64,12 +64,16 @@ class Trainer:
         experiment_dir: str | Path = "experiments/default",
         logger_obj: Any | None = None,
         tokenizer: Tokenizer | None = None,
+        class_weights: torch.Tensor | None = None,
+        adjacency: torch.Tensor | None = None,
     ):
         self.cfg = cfg
         self.device_mgr = DeviceManager(device)
         self.device = self.device_mgr.device
         self.model = model.to(self.device)
         self.tokenizer = tokenizer
+        self.class_weights = class_weights.to(self.device) if class_weights is not None else None
+        self.adjacency = adjacency.to(self.device) if adjacency is not None else None
 
         self.train_loader = train_loader
         self.val_loader = val_loader
@@ -134,8 +138,14 @@ class Trainer:
     # ──────────────────────────────────────────────────────────────
 
     def _build_cls_criterion(self) -> nn.Module:
-        """Build classification loss (CE with label smoothing)."""
+        """Build classification loss (CE with label smoothing and optional class weights)."""
         label_smoothing = self.cfg.training.get("label_smoothing", 0.1)
+        if self.class_weights is not None:
+            logger.info(f"Using class weights for CE loss: {self.class_weights.tolist()[:5]}...")
+            return nn.CrossEntropyLoss(
+                weight=self.class_weights,
+                label_smoothing=label_smoothing,
+            )
         return nn.CrossEntropyLoss(label_smoothing=label_smoothing)
 
     def _build_contrast_criterion(self) -> nn.Module:
@@ -237,7 +247,7 @@ class Trainer:
             # ── Multi-task forward pass ──
             # task="all" activates classification + retrieval + generation (if target_tokens provided)
             use_task = "all" if self.has_retrieval else "classification"
-            outputs = self.model(eeg, task=use_task, tgt_tokens=target_tokens)
+            outputs = self.model(eeg, adj=self.adjacency, task=use_task, tgt_tokens=target_tokens)
 
             # ── Classification loss ──
             cls_logits = outputs["cls_logits"]
@@ -403,7 +413,7 @@ class Trainer:
             labels = batch["label"].to(self.device)
 
             use_task = "all" if self.has_retrieval else "classification"
-            outputs = self.model(eeg, task=use_task)
+            outputs = self.model(eeg, adj=self.adjacency, task=use_task)
             logits = outputs["cls_logits"]
 
             # Classification loss
@@ -428,7 +438,7 @@ class Trainer:
             
             if "target_tokens" in batch and self.has_generation and self.loss_weights["gen"] > 0 and has_text_in_batch:
                 target_tokens = batch["target_tokens"].to(self.device)
-                outputs = self.model(eeg, task=use_task, tgt_tokens=target_tokens)
+                outputs = self.model(eeg, adj=self.adjacency, task=use_task, tgt_tokens=target_tokens)
                 if "logits" in outputs:
                     gen_logits = outputs["logits"]
                     ce_loss = self.gen_criterion(gen_logits.transpose(1, 2), target_tokens)

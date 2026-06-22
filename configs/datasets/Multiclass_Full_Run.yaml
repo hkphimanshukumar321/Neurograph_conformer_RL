@@ -1,0 +1,30 @@
+# Multiclass_Full_Run — Merged multi-dataset configuration
+# Combines all datasets (chisco, thinking_out_loud, zuco) into a single
+# multi-class classification task.
+#
+# After channel harmonization, all datasets are mapped to the standard
+# 61-channel 10-20 layout (see channel_harmonization.py).
+
+dataset:
+  name: Multiclass_Full_Run
+  version: "1.0"
+  language: multi           # mixed Chinese (chisco) + English (zuco, thinking_out_loud)
+  cognitive_task: mixed     # imagined speech + inner speech + reading
+
+  # Recording parameters — after harmonization
+  n_channels_original: 61   # standard 10-20 layout (61 channels)
+  montage: standard_1020
+  n_subjects: null           # varies — aggregated across datasets
+
+  # Tasks
+  label_type: class          # multi-class label (merged from all datasets)
+  n_classes: null             # determined at runtime from manifest
+
+  # Paths
+  raw_dir: raw
+  processed_dir: processed
+
+  # Preprocessing — use base.yaml defaults
+  preprocessing:
+    epoch_tmin: 0.0
+    epoch_tmax: 2.0
