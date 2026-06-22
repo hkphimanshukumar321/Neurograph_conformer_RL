@@ -153,11 +153,10 @@ def main():
         else:
             logger.info("Generation head config found but generation/RL weights are 0 — skipping generation head (Phase 1)")
 
-    # ── Split Dataset (Stratified) ──
-    # Use stratified splitting to ensure each class appears in train/val/test
-    from sklearn.model_selection import StratifiedShuffleSplit
+    # ── Split Dataset (Robust Stratified) ──
+    # Custom stratified split that won't crash on rare classes (<3 samples)
     import numpy as np
-
+    
     all_labels_for_split = []
     for i in range(len(full_dataset)):
         row = full_dataset.df.iloc[i]
@@ -169,23 +168,30 @@ def main():
             all_labels_for_split.append(0)
     all_labels_for_split = np.array(all_labels_for_split)
 
-    # First split: separate test set (10%)
-    sss_test = StratifiedShuffleSplit(n_splits=1, test_size=0.1, random_state=args.seed)
-    train_val_idx, test_idx = next(sss_test.split(np.zeros(len(all_labels_for_split)), all_labels_for_split))
-
-    # Second split: separate val from train (10% of original = ~11% of train_val)
-    val_frac = 0.1 / 0.9  # adjust fraction since we're splitting from 90%
-    sss_val = StratifiedShuffleSplit(n_splits=1, test_size=val_frac, random_state=args.seed)
-    train_idx, val_idx = next(sss_val.split(
-        np.zeros(len(train_val_idx)), all_labels_for_split[train_val_idx]
-    ))
-    # Map back to original indices
-    train_idx = train_val_idx[train_idx]
-    val_idx = train_val_idx[val_idx]
-
-    train_dataset = torch.utils.data.Subset(full_dataset, train_idx.tolist())
-    val_dataset = torch.utils.data.Subset(full_dataset, val_idx.tolist())
-    test_dataset = torch.utils.data.Subset(full_dataset, test_idx.tolist())
+    train_idx, val_idx, test_idx = [], [], []
+    # Seed numpy for reproducibility
+    rng = np.random.default_rng(args.seed)
+    
+    for cls_idx in np.unique(all_labels_for_split):
+        idx = np.where(all_labels_for_split == cls_idx)[0]
+        rng.shuffle(idx)
+        n = len(idx)
+        
+        if n >= 3:
+            t = max(1, int(0.1 * n))
+            v = max(1, int(0.1 * n))
+            test_idx.extend(idx[:t])
+            val_idx.extend(idx[t:t+v])
+            train_idx.extend(idx[t+v:])
+        elif n == 2:
+            train_idx.append(idx[0])
+            test_idx.append(idx[1])
+        else:
+            train_idx.extend(idx)
+            
+    train_dataset = torch.utils.data.Subset(full_dataset, train_idx)
+    val_dataset = torch.utils.data.Subset(full_dataset, val_idx)
+    test_dataset = torch.utils.data.Subset(full_dataset, test_idx)
 
     train_size = len(train_dataset)
     val_size = len(val_dataset)
