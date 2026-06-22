@@ -244,10 +244,19 @@ class Trainer:
             if "target_tokens" in batch and self.has_generation:
                 target_tokens = batch["target_tokens"].to(self.device)
 
+            # Dynamically adjust adjacency to match batch's padded channels
+            current_adj = self.adjacency
+            if self.adjacency is not None and self.adjacency.shape[0] != eeg.shape[1]:
+                b_c = eeg.shape[1]
+                min_c = min(self.adjacency.shape[0], b_c)
+                # Pad with identity (self-connections) for extra channels
+                current_adj = torch.eye(b_c, device=self.device)
+                current_adj[:min_c, :min_c] = self.adjacency[:min_c, :min_c]
+
             # ── Multi-task forward pass ──
             # task="all" activates classification + retrieval + generation (if target_tokens provided)
             use_task = "all" if self.has_retrieval else "classification"
-            outputs = self.model(eeg, adj=self.adjacency, task=use_task, tgt_tokens=target_tokens)
+            outputs = self.model(eeg, adj=current_adj, task=use_task, tgt_tokens=target_tokens)
 
             # ── Classification loss ──
             cls_logits = outputs["cls_logits"]
@@ -412,8 +421,16 @@ class Trainer:
             eeg = batch["eeg"].to(self.device)
             labels = batch["label"].to(self.device)
 
+            # Dynamically adjust adjacency
+            current_adj = self.adjacency
+            if self.adjacency is not None and self.adjacency.shape[0] != eeg.shape[1]:
+                b_c = eeg.shape[1]
+                min_c = min(self.adjacency.shape[0], b_c)
+                current_adj = torch.eye(b_c, device=self.device)
+                current_adj[:min_c, :min_c] = self.adjacency[:min_c, :min_c]
+
             use_task = "all" if self.has_retrieval else "classification"
-            outputs = self.model(eeg, adj=self.adjacency, task=use_task)
+            outputs = self.model(eeg, adj=current_adj, task=use_task)
             logits = outputs["cls_logits"]
 
             # Classification loss
@@ -438,7 +455,7 @@ class Trainer:
             
             if "target_tokens" in batch and self.has_generation and self.loss_weights["gen"] > 0 and has_text_in_batch:
                 target_tokens = batch["target_tokens"].to(self.device)
-                outputs = self.model(eeg, adj=self.adjacency, task=use_task, tgt_tokens=target_tokens)
+                outputs = self.model(eeg, adj=current_adj, task=use_task, tgt_tokens=target_tokens)
                 if "logits" in outputs:
                     gen_logits = outputs["logits"]
                     ce_loss = self.gen_criterion(gen_logits.transpose(1, 2), target_tokens)
