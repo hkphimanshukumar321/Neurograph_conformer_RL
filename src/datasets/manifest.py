@@ -60,11 +60,24 @@ class ManifestDataset(Dataset):
         self.df = df.reset_index(drop=True)
         
         # Resolve label column: prefer "label", fall back to "trial_type", then "task"
-        self._label_col = None
-        for col_candidate in ["label", "trial_type", "task"]:
-            if col_candidate in self.df.columns:
-                self._label_col = col_candidate
-                break
+        if dataset_name in ["Multiclass_Full_Run", "all"]:
+            # Create a unified label combining dataset name and its available label
+            unified_labels = []
+            for _, row in self.df.iterrows():
+                lab = "unknown"
+                for col in ["label", "trial_type", "task"]:
+                    if col in row and pd.notna(row[col]):
+                        lab = str(row[col])
+                        break
+                unified_labels.append(f"{row['dataset']}_{lab}")
+            self.df["unified_label"] = unified_labels
+            self._label_col = "unified_label"
+        else:
+            self._label_col = None
+            for col_candidate in ["label", "trial_type", "task"]:
+                if col_candidate in self.df.columns:
+                    self._label_col = col_candidate
+                    break
         
         # Build a label map dynamically
         self.label_str_to_int = {}
