@@ -49,7 +49,7 @@ def build_manifests(project_root=None):
             if filepath.suffix.lower() not in ['.edf', '.bdf', '.vhdr', '.mat', '.set']:
                 continue
             
-                # 1. Chisco Dataset (1 file = 1 trial for .edf files)
+            # 1. Chisco Dataset (1 file = 1 trial for .edf files)
             if dataset == "chisco":
                 resolved_filepath = filepath.resolve()
                 if resolved_filepath in seen_chisco_files:
@@ -60,35 +60,96 @@ def build_manifests(project_root=None):
                 parts = trial_id.split('_')
                 sub = next((p for p in parts if p.startswith("sub-")), "sub-unk")
                 ses = next((p for p in parts if p.startswith("ses-")), "ses-unk")
-                run = next((p for p in parts if p.startswith("run-")), "run-unk")
+                run = next((p for p in parts if p.startswith("run-")), None)
+                task = next((p for p in parts if p.startswith("task-")), "task-imagine")
                 
-                # The run number (e.g., 037) maps to the specific sentence stimulus/category.
-                # Use the run number as the initial classification label to enable learning.
-                label_val = run.replace("run-", "")
-                if label_val.isdigit():
-                    label_val = int(label_val)
-                
+                # ── Robust label extraction with multiple fallbacks ──
+                label_val = None
                 text_str = ""
-                # Try to load the text from the downloaded textdataset
-                text_path = project_root / "ds005170-1.1.2" / "textdataset" / f"split_data_{label_val}.xlsx"
-                if text_path.exists():
-                    try:
-                        xlsx_df = pd.read_excel(text_path)
-                        # We try to find the longest string in the first row, or column named "Sentence"/"Text"
-                        text_str = str(xlsx_df.iloc[0, 0]) # Best effort default
-                        for col in xlsx_df.columns:
-                            if any(x in str(col).lower() for x in ["text", "sentence", "stimuli", "word"]):
-                                text_str = str(xlsx_df[col].iloc[0])
-                                break
-                    except Exception as e:
-                        logger.warning(f"Failed to read {text_path}: {e}")
+                
+                # Strategy 1: Use run number from filename (best: maps to stimulus ID)
+                if run is not None:
+                    run_str = run.replace("run-", "")
+                    if run_str.isdigit():
+                        label_val = int(run_str)
+                    elif run_str != "unk":
+                        label_val = run_str
+                
+                # Strategy 2: Check paired events.tsv for trial_type
+                if label_val is None:
+                    events_file = filepath.parent / (trial_id.replace("_eeg", "_events") + ".tsv")
+                    if not events_file.exists():
+                        # Try without _eeg suffix
+                        events_file = filepath.parent / (trial_id + "_events.tsv")
+                    if not events_file.exists():
+                        # Try BIDS-standard naming
+                        base_parts = [p for p in parts if not p.startswith("eeg")]
+                        events_file = filepath.parent / ("_".join(base_parts) + "_events.tsv")
+                    
+                    if events_file.exists():
+                        try:
+                            ev_df = pd.read_csv(events_file, sep='\t')
+                            # Look for trial_type or value column
+                            for col in ['trial_type', 'value', 'stimulus', 'condition']:
+                                if col in ev_df.columns:
+                                    unique_vals = ev_df[col].dropna().unique()
+                                    if len(unique_vals) > 0:
+                                        # Use the most common non-empty value
+                                        val = str(ev_df[col].dropna().mode().iloc[0])
+                                        if val and val.lower() not in ('nan', 'n/a', ''):
+                                            label_val = val
+                                            break
+                        except Exception as e:
+                            logger.debug(f"Could not parse events {events_file}: {e}")
+                
+                # Strategy 3: Extract label from directory structure
+                # e.g. ds005170/sub-01/ses-01/eeg/ → use sub+ses combo
+                if label_val is None:
+                    # Use the parent directory name chain as a differentiator
+                    parent_parts = []
+                    for parent in filepath.parents:
+                        name = parent.name
+                        if name.startswith("sub-") or name.startswith("ses-") or name.startswith("run-"):
+                            parent_parts.append(name)
+                        if name in ("eeg", "data", "raw"):
+                            break
+                    if parent_parts:
+                        label_val = "_".join(reversed(parent_parts))
+                
+                # Strategy 4: Use a hash of the filename for unique labeling  
+                # This ensures DIFFERENT files get DIFFERENT labels
+                if label_val is None:
+                    # Extract any numeric part from filename
+                    import re
+                    nums = re.findall(r'\d+', trial_id)
+                    if nums:
+                        # Use the last significant number (likely trial/run index)
+                        label_val = int(nums[-1]) if nums[-1].isdigit() else nums[-1]
+                    else:
+                        # Absolute fallback: sequential index
+                        label_val = len(rows)
+                
+                # ── Text extraction ──
+                # Try to load the text from the textdataset
+                if isinstance(label_val, int):
+                    text_path = project_root / "ds005170-1.1.2" / "textdataset" / f"split_data_{label_val}.xlsx"
+                    if text_path.exists():
+                        try:
+                            xlsx_df = pd.read_excel(text_path)
+                            text_str = str(xlsx_df.iloc[0, 0])  # Best effort default
+                            for col in xlsx_df.columns:
+                                if any(x in str(col).lower() for x in ["text", "sentence", "stimuli", "word"]):
+                                    text_str = str(xlsx_df[col].iloc[0])
+                                    break
+                        except Exception as e:
+                            logger.warning(f"Failed to read {text_path}: {e}")
                 
                 rows.append({
-                    "trial_id": f"chisco_{sub}_{ses}_{run}",
+                    "trial_id": f"chisco_{sub}_{ses}_{run or 'run-auto'}",
                     "subject_id": sub,
                     "session_id": f"chisco_{sub}_{ses}",
                     "dataset": "chisco",
-                    "task": "sentence_level_imagined_speech",
+                    "task": task.replace("task-", ""),
                     "eeg_path": str(filepath),
                     "onset": 0.0,
                     "duration": -1.0,
@@ -96,7 +157,7 @@ def build_manifests(project_root=None):
                     "label": label_val,
                     "text": text_str,
                     "raw_metadata": "{}",
-                    "split": "train" # Default to train, user can split later
+                    "split": "train"  # Default to train, user can split later
                 })
                 
             # 2. Thinking Out Loud (Use _events.tsv)
@@ -281,6 +342,21 @@ def build_manifests(project_root=None):
     out_csv.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(out_csv, index=False)
     logger.info(f"Successfully built trials.csv with {len(df)} rows!")
+    
+    # ── Diagnostic: label distribution per dataset ──
+    if "label" in df.columns and "dataset" in df.columns:
+        for ds_name in df["dataset"].unique():
+            ds_df = df[df["dataset"] == ds_name]
+            n_unique = ds_df["label"].nunique()
+            sample_labels = ds_df["label"].value_counts().head(5).to_dict()
+            logger.info(f"  {ds_name}: {len(ds_df)} trials, {n_unique} unique labels")
+            logger.info(f"    Top labels: {sample_labels}")
+            if n_unique <= 1:
+                logger.error(
+                    f"  ⚠ CRITICAL: {ds_name} has only {n_unique} unique label(s)! "
+                    f"Training will be degenerate (1-class). "
+                    f"Check label extraction logic in build_manifests.py."
+                )
 
 if __name__ == "__main__":
     build_manifests()

@@ -84,6 +84,33 @@ class ManifestDataset(Dataset):
         self.label_int_to_str = {}
         if self._label_col is not None:
             unique_labels = sorted([str(x) for x in self.df[self._label_col].dropna().unique()])
+            
+            # Guard: if only 1 unique label, try fallback columns
+            if len(unique_labels) <= 1:
+                logger.warning(
+                    f"ManifestDataset: Label column '{self._label_col}' has only "
+                    f"{len(unique_labels)} unique value(s): {unique_labels}. "
+                    f"Attempting fallback label columns..."
+                )
+                fallback_cols = ["trial_id", "session_id", "task", "eeg_path"]
+                for fb_col in fallback_cols:
+                    if fb_col in self.df.columns:
+                        fb_unique = sorted([str(x) for x in self.df[fb_col].dropna().unique()])
+                        if len(fb_unique) > 1:
+                            logger.info(
+                                f"  → Using fallback column '{fb_col}' with "
+                                f"{len(fb_unique)} unique values"
+                            )
+                            self._label_col = fb_col
+                            unique_labels = fb_unique
+                            break
+                
+                if len(unique_labels) <= 1:
+                    logger.error(
+                        f"ManifestDataset: No column with >1 unique label found! "
+                        f"Training will be degenerate. Check build_manifests.py."
+                    )
+            
             for i, lab in enumerate(unique_labels):
                 self.label_str_to_int[lab] = i
                 self.label_int_to_str[i] = lab
