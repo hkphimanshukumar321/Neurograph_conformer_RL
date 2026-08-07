@@ -9,6 +9,7 @@ from torch.utils.data import Dataset
 from src.datasets.chisco import ChiscoDataset
 from src.datasets.zuco import ZucoDataset
 from src.datasets.thinking_out_loud import ThinkingOutLoudDataset
+from src.datasets.tokenizer import Tokenizer
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,7 @@ def get_dataset(
     subjects: list[str] | None = None,
     transform: Callable | None = None,
     max_samples: int = 500,
+    tokenizer: Tokenizer | None = None,
 ) -> Dataset:
     """Instantiate the appropriate PyTorch Dataset based on the dataset name.
     
@@ -49,6 +51,7 @@ def get_dataset(
             subjects=subjects,
             transform=transform,
             max_samples=max_samples,
+            tokenizer=tokenizer,
         )
 
     if dataset_name not in _REGISTRY:
@@ -62,4 +65,5 @@ def get_dataset(
         subjects=subjects,
         transform=transform,
         max_samples=max_samples,
+        tokenizer=tokenizer,
     )

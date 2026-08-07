@@ -22,7 +22,7 @@ model:
   spatial:
     type: graph
     n_layers: 2
-    n_heads: 8
+    n_heads: 8  # definition of 8 heads trainer.py  --line 94 
     d_model: 256
     dropout: 0.1
     adjacency: hybrid       # α · A_distance + (1-α) · A_correlation
@@ -93,7 +93,7 @@ model:
 
   # RL fine-tuning configuration (Stage 4)
   rl:
-    enabled: false           # enabled only in Stage 4
+    enabled: True         # enabled only in Stage 4
     method: scst             # "scst", "mwer", "ppo"
     # SCST
     scst:

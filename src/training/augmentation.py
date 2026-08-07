@@ -45,6 +45,8 @@ class ChannelDropout:
         return x * mask
 
 
+##there is already  noise on the EEG  signlas no  need of augenting it   
+
 class GaussianNoise:
     """Add Gaussian noise to EEG signal.
 

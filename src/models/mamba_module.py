@@ -166,7 +166,16 @@ class MambaBlock(nn.Module):
         return residual + self.dropout(x)
 
     def _forward_fallback(self, x: torch.Tensor) -> torch.Tensor:
-        """Fallback SSM forward pass."""
+        """Fallback SSM forward pass with proper selective scan recurrence.
+
+        Implements a simplified but functional selective state-space model:
+        1. Input projection → split into two paths (for gating)
+        2. 1D causal convolution (local context)
+        3. Input-dependent discretization: compute B, C, dt from input
+        4. Sequential scan: h[t] = A_bar * h[t-1] + B_bar * x[t]; y[t] = C * h[t]
+        5. Skip connection via D parameter
+        6. Output gating and projection
+        """
         batch, seq_len, d = x.shape
 
         # Input projection
@@ -179,11 +188,45 @@ class MambaBlock(nn.Module):
         x_conv = x_conv.transpose(1, 2)  # (batch, L, d_inner)
         x_conv = F.silu(x_conv)
 
-        # Selective SSM (simplified: skip actual recurrence, use gated MLP)
-        # In practice, the full implementation uses selective scan CUDA kernel
-        y = x_conv * self.D.unsqueeze(0).unsqueeze(0)
+        # Input-dependent SSM parameters
+        # x_proj produces B and C (each d_state-dimensional)
+        bc = self.x_proj(x_conv)  # (batch, L, 2*d_state)
+        B, C = bc.chunk(2, dim=-1)  # each (batch, L, d_state)
 
-        # Gate
+        # Input-dependent step size (dt)
+        dt = F.softplus(self.dt_proj(x_conv))  # (batch, L, d_inner), positive
+
+        # Discretize continuous SSM: A_bar = exp(A * dt), B_bar = dt * B
+        A = -torch.exp(self.A_log.float())  # (d_inner, d_state), negative for stability
+
+        # Sequential scan
+        y = torch.zeros_like(x_conv)  # (batch, L, d_inner)
+        h = torch.zeros(batch, self.d_inner, self.d_state, device=x.device, dtype=x.dtype)
+
+        for t in range(seq_len):
+            dt_t = dt[:, t, :]  # (batch, d_inner)
+            B_t = B[:, t, :]    # (batch, d_state)
+            C_t = C[:, t, :]    # (batch, d_state)
+            x_t = x_conv[:, t, :]  # (batch, d_inner)
+
+            # Discretize: A_bar = exp(A * dt), where A is (d_inner, d_state)
+            # dt_t is (batch, d_inner) → expand for broadcasting
+            A_bar = torch.exp(A.unsqueeze(0) * dt_t.unsqueeze(-1))  # (batch, d_inner, d_state)
+
+            # B_bar = dt * B (outer product-like)
+            B_bar = dt_t.unsqueeze(-1) * B_t.unsqueeze(1)  # (batch, d_inner, d_state)
+
+            # State update: h = A_bar * h + B_bar * x
+            h = A_bar * h + B_bar * x_t.unsqueeze(-1)  # (batch, d_inner, d_state)
+
+            # Output: y = C * h (summed over state dimension)
+            y_t = (h * C_t.unsqueeze(1)).sum(dim=-1)  # (batch, d_inner)
+            y[:, t, :] = y_t
+
+        # Skip connection
+        y = y + x_conv * self.D.unsqueeze(0).unsqueeze(0)
+
+        # Gate with second path
         y = y * F.silu(z)
 
         # Output projection

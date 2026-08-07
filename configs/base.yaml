@@ -72,7 +72,7 @@ training:
   gradient_clip_val: 1.0
   early_stopping:
     enabled: true
-    patience: 30
+    patience: 35
     monitor: val_balanced_accuracy
     mode: max
   label_smoothing: 0.1

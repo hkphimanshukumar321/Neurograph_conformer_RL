@@ -206,7 +206,7 @@ pytest tests/test_models.py -v
 @article{neurograph2025,
   title={Multi-Level Neural Language Decoding from Non-Invasive EEG via
          Graph-Conformer Architecture with Sequence-Level Reward Optimization},
-  author={Your Name},
+  author={Himanshu Kumar},
   year={2025},
   journal={IEEE Transactions on Neural Systems and Rehabilitation Engineering}
 }

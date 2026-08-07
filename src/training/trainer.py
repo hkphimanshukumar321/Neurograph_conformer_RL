@@ -2,7 +2,7 @@
 Main Trainer — orchestrates multi-task training across all stages.
 
 Supports:
-  - Classification (CE / Focal loss)
+  - Classification (CE / Focal loss) 
   - Contrastive retrieval (SupCon loss on retrieval embeddings)
   - Generation (CTC + CE — Phase 2, gated by config)
   - RL fine-tuning (SCST — Phase 3, gated by config)
@@ -24,7 +24,7 @@ import numpy as np
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader
 
-from src.models.losses import SupConLoss
+from src.models.losses import SupConLoss, InfoNCELoss
 from src.utils.device import DeviceManager
 from src.utils.seed import seed_everything
 from src.datasets.tokenizer import Tokenizer
@@ -107,8 +107,17 @@ class Trainer:
 
         self.rl_trainer = None
         if self.has_generation and self.loss_weights["rl"] > 0:
-            rl_cfg = self.cfg.get("model", {}).get("rl", {})
-            self.rl_trainer = RLTrainer(self.model, rl_cfg, self.device)
+            # Unify RL config: check training.rl first, then model.rl
+            rl_cfg = self.cfg.get("training", {}).get("rl", {})
+            if not rl_cfg:
+                rl_cfg = self.cfg.get("model", {}).get("rl", {})
+            if rl_cfg:
+                self.rl_trainer = RLTrainer(self.model, rl_cfg, self.device)
+            else:
+                logger.warning(
+                    "RL loss weight > 0 but no RL config found at training.rl or model.rl. "
+                    "RL training will be skipped."
+                )
 
         # ── Optimizer ──
         self.optimizer = self._build_optimizer()
@@ -149,13 +158,39 @@ class Trainer:
         return nn.CrossEntropyLoss(label_smoothing=label_smoothing)
 
     def _build_contrast_criterion(self) -> nn.Module:
-        """Build supervised contrastive loss for retrieval embeddings."""
+        """Build contrastive loss for retrieval embeddings.
+        
+        Uses InfoNCELoss for cross-modal EEG↔Text alignment when a text 
+        encoder is available (checks config for text_encoder model name).
+        Falls back to SupConLoss (label-supervised) otherwise.
+        """
         temp = 0.07
+        text_encoder_name = None
         if hasattr(self.cfg, "model"):
             heads_cfg = self.cfg.model.get("heads", self.cfg.model.get("arch", {}).get("heads", {}))
             ret_cfg = heads_cfg.get("retrieval", {})
             temp = ret_cfg.get("temperature", 0.07)
-        return SupConLoss(temperature=temp)
+            # Check if text encoder is configured
+            text_encoder_name = self.cfg.model.get(
+                "text_encoder", 
+                self.cfg.model.get("arch", {}).get("text_encoder", None)
+            )
+        
+        # If text encoder specified, use InfoNCE for cross-modal learning
+        if text_encoder_name:
+            try:
+                from sentence_transformers import SentenceTransformer
+                self._text_encoder = SentenceTransformer(text_encoder_name, device="cpu")
+                self._text_encoder_device = "cpu"
+                logger.info(f"Loaded text encoder '{text_encoder_name}' for EEG↔Text contrastive learning")
+                return InfoNCELoss(temperature=temp)
+            except Exception as e:
+                logger.warning(f"Failed to load text encoder '{text_encoder_name}': {e}. Falling back to SupConLoss.")
+                self._text_encoder = None
+                return SupConLoss(temperature=temp)
+        else:
+            self._text_encoder = None
+            return SupConLoss(temperature=temp)
 
     # ──────────────────────────────────────────────────────────────
     # Optimizer & scheduler
@@ -262,11 +297,33 @@ class Trainer:
             cls_logits = outputs["cls_logits"]
             cls_loss = self.cls_criterion(cls_logits, labels)
 
-            # ── Contrastive loss (SupCon on retrieval embeddings) ──
+            # ── Contrastive loss (EEG↔Text with InfoNCE or label-supervised SupCon) ──
             contrast_loss = torch.tensor(0.0, device=self.device)
             if self.has_retrieval and "retrieval_emb" in outputs and self.loss_weights["contrast"] > 0:
                 retrieval_emb = outputs["retrieval_emb"]  # (B, d_embed), L2-normalized
-                contrast_loss = self.contrast_criterion(retrieval_emb, labels)
+                if self._text_encoder is not None:
+                    # InfoNCE: compute text embeddings and align with EEG embeddings
+                    texts = batch.get("text", [])
+                    if texts and any(t.strip() for t in texts):
+                        with torch.no_grad():
+                            text_emb = self._text_encoder.encode(
+                                texts, convert_to_tensor=True
+                            ).to(self.device)
+                            text_emb = nn.functional.normalize(text_emb, dim=-1)
+                        # Project text embeddings to same dimension if needed
+                        if text_emb.shape[-1] != retrieval_emb.shape[-1]:
+                            if not hasattr(self, '_text_proj'):
+                                self._text_proj = nn.Linear(
+                                    text_emb.shape[-1], retrieval_emb.shape[-1]
+                                ).to(self.device)
+                            text_emb = nn.functional.normalize(
+                                self._text_proj(text_emb), dim=-1
+                            )
+                        contrast_loss = self.contrast_criterion(retrieval_emb, text_emb)
+                    # else: skip if no text in batch
+                else:
+                    # SupConLoss fallback: use integer labels
+                    contrast_loss = self.contrast_criterion(retrieval_emb, labels)
 
             # ── Generation & CTC Loss (Phase 2) ──
             gen_loss = torch.tensor(0.0, device=self.device)

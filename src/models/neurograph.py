@@ -25,6 +25,7 @@ from src.models.graph_encoder import GraphSpatialEncoder
 from src.models.heads import ClassificationHead, GenerationHead, RetrievalHead
 from src.models.mamba_module import MambaModule
 from src.models.transformer_decoder import TransformerDecoder
+from src.features.region_pooling import RegionPooling
 
 logger = logging.getLogger(__name__)
 
@@ -53,12 +54,35 @@ class NeuroGraphConformer(nn.Module):
         n_samples: int = 500,
         n_classes: int | dict = 11,
         vocab_size: int | None = None,
+        channel_names: list[str] | None = None,
     ):
         super().__init__()
         self.cfg = cfg
         self.n_channels = n_channels
         arch = cfg.get("arch", cfg)  # handle nested config
         d_model = arch.get("encoder", {}).get("d_model", 128)
+
+        # ──── 0. Region Pooling (optional) ────
+        channel_strategy = arch.get("channel_strategy", cfg.get("channel_strategy", "none"))
+        self.region_pooling = None
+        if channel_strategy == "region_pooling" and channel_names is not None:
+            pooling_method = arch.get("region_pooling_method", "mean")
+            self.region_pooling = RegionPooling(
+                ch_names=channel_names,
+                method=pooling_method,
+                d_in=n_samples,  # features per channel before frontend
+            )
+            n_channels = self.region_pooling.n_regions  # typically 9
+            logger.info(
+                f"Region pooling enabled: {len(channel_names)} channels → "
+                f"{n_channels} regions (method={pooling_method})"
+            )
+        elif channel_strategy == "region_pooling" and channel_names is None:
+            logger.warning(
+                "channel_strategy='region_pooling' but no channel_names provided. "
+                "Skipping region pooling."
+            )
+        self.n_channels = n_channels
 
         # ──── 1. Front-End ────
         frontend_cfg = arch.get("frontend", {})
@@ -316,6 +340,13 @@ class NeuroGraphConformer(nn.Module):
         torch.Tensor
             Encoder output, shape (batch, L, d_model).
         """
+        # Apply region pooling if configured
+        if self.region_pooling is not None:
+            # x: (batch, C, T) → pool to (batch, n_regions, T)
+            x = x.transpose(1, 2)  # (batch, T, C)
+            x = self.region_pooling(x)  # (batch, n_regions, T) — pools over C
+            x = x.transpose(1, 2)  # (batch, n_regions, T)
+
         if self.use_lightweight_frontend and self.lightweight_frontend is not None:
             # ---- Lightweight path: preserves electrodes + time ----
             # 1. Extract 4D time-frequency tensor: (B, N, F, T')

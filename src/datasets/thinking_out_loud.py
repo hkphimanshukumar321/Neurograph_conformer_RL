@@ -4,10 +4,12 @@ from pathlib import Path
 from typing import Callable
 
 from src.datasets.manifest import ManifestDataset
+from src.datasets.tokenizer import Tokenizer
+
 
 class ThinkingOutLoudDataset(ManifestDataset):
     """Dataset loader for the Thinking Out Loud dataset."""
-    
+
     def __init__(
         self,
         manifest_path: str | Path,
@@ -15,6 +17,7 @@ class ThinkingOutLoudDataset(ManifestDataset):
         subjects: list[str] | None = None,
         transform: Callable | None = None,
         max_samples: int = 500,
+        tokenizer: Tokenizer | None = None,
     ):
         super().__init__(
             manifest_path=manifest_path,
@@ -23,4 +26,5 @@ class ThinkingOutLoudDataset(ManifestDataset):
             subjects=subjects,
             transform=transform,
             max_samples=max_samples,
+            tokenizer=tokenizer,
         )

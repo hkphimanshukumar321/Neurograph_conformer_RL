@@ -103,11 +103,13 @@ class ConformerEncoder(nn.Module):
         torch.Tensor
             Encoded sequence, shape (batch, L, d_model).
         """
-        # Add positional encoding
+        # Add sinusoidal positional encoding to input
+        # (relative position bias is computed inside MHSA)
         pos_emb = self.pos_encoding(x)
+        x = x + pos_emb
 
         for layer in self.layers:
-            x = layer(x, pos_emb=pos_emb, mask=mask)
+            x = layer(x, mask=mask)
 
         return self.final_norm(x)
 
@@ -163,7 +165,6 @@ class ConformerBlock(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        pos_emb: torch.Tensor | None = None,
         mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Forward pass.
@@ -172,8 +173,6 @@ class ConformerBlock(nn.Module):
         ----------
         x : torch.Tensor
             Input, shape (batch, L, d_model).
-        pos_emb : torch.Tensor, optional
-            Positional embedding.
         mask : torch.Tensor, optional
             Padding mask.
 
@@ -188,7 +187,7 @@ class ConformerBlock(nn.Module):
             x = self.ffn1_norm(x)
             x = residual + self.ffn1_scale * self.dropout(self.ffn1(x))
 
-        # MHSA
+        # MHSA (relative position bias is computed inside)
         residual = x
         x = self.mhsa_norm(x)
         x = residual + self.dropout(self.mhsa(x, mask=mask))
