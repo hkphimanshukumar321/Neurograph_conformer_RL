@@ -234,7 +234,7 @@ def main():
 
     # ── Load pretrained (optional) ──
     if args.pretrained:
-        checkpoint = torch.load(args.pretrained, map_location="cpu")
+        checkpoint = torch.load(args.pretrained, map_location="cpu", weights_only=False)
         if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
             model.load_state_dict(checkpoint["model_state_dict"], strict=False)
         else:
@@ -324,7 +324,7 @@ def main():
             )
         else:
             logger.info(f"Loading Stage 3 checkpoint: {stage3_ckpt}")
-            checkpoint = torch.load(stage3_ckpt, map_location=args.device)
+            checkpoint = torch.load(stage3_ckpt, map_location=args.device, weights_only=False)
             if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
                 model.load_state_dict(checkpoint["model_state_dict"], strict=False)
             else:

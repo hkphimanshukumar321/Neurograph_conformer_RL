@@ -272,7 +272,7 @@ def main():
 
     # ── Load pretrained (optional) ──
     if args.pretrained:
-        checkpoint = torch.load(args.pretrained, map_location="cpu")
+        checkpoint = torch.load(args.pretrained, map_location="cpu", weights_only=False)
         model.load_state_dict(checkpoint["model_state_dict"], strict=False)
         logger.info(f"Loaded pretrained weights from {args.pretrained}")
 
