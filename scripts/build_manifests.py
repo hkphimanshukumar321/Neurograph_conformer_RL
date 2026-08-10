@@ -318,6 +318,8 @@ def build_manifests(project_root=None):
                                 "onset": 0.0,
                                 "duration": -1.0,
                                 "trial_type": "pretraining",
+                                "label": 0,
+                                "text": "",
                                 "raw_metadata": "{}",
                                 "split": "train"
                             })
@@ -329,6 +331,7 @@ def build_manifests(project_root=None):
                         "session_id": "zuco_unk",
                         "dataset": "zuco",
                         "task": "natural_reading_language_pretraining",
+                        "label": 0,
                         "eeg_path": str(filepath),
                         "onset": 0.0,
                         "duration": -1.0,
