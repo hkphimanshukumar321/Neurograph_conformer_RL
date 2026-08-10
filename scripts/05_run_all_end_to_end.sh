@@ -100,20 +100,22 @@ else
   echo "[WARN] 01_scan_datasets.sh not found — skipping scan step."
 fi
 
-# ── Step 2: Build Manifests (trials.csv) ──
-step_banner "2/6" "Build Manifests"
-if [[ -f "$PROJECT_ROOT/scripts/build_manifests.py" ]]; then
-  python "$PROJECT_ROOT/scripts/build_manifests.py"
-else
-  echo "[WARN] build_manifests.py not found — skipping manifest build."
-fi
-
-# ── Step 3: Prepare Metadata Templates ──
-step_banner "3/6" "Prepare Metadata Templates"
+# ── Step 2: Prepare Metadata Templates ──
+# NOTE: This must run BEFORE build_manifests.py so the templates
+# get created first and then overwritten with real data.
+step_banner "2/6" "Prepare Metadata Templates"
 if [[ -f "$PROJECT_ROOT/scripts/02_prepare_metadata.sh" ]]; then
   bash "$PROJECT_ROOT/scripts/02_prepare_metadata.sh"
 else
   echo "[WARN] 02_prepare_metadata.sh not found — skipping metadata prep."
+fi
+
+# ── Step 3: Build Manifests (trials.csv) ──
+step_banner "3/6" "Build Manifests"
+if [[ -f "$PROJECT_ROOT/scripts/build_manifests.py" ]]; then
+  python "$PROJECT_ROOT/scripts/build_manifests.py"
+else
+  echo "[WARN] build_manifests.py not found — skipping manifest build."
 fi
 
 # ── Step 4: Fix / Validate trials.csv ──

@@ -19,9 +19,16 @@ cat > "$META_DIR/channels.tsv" <<'TSV'
 dataset	subject_id	session_id	channel_name	channel_type	x	y	z	region	keep
 TSV
 
-cat > "$META_DIR/trials.csv" <<'CSV'
+# Only create trials.csv template if it doesn't already exist with data.
+# build_manifests.py writes the real trials.csv; don't clobber it.
+if [[ ! -s "$META_DIR/trials.csv" ]]; then
+  cat > "$META_DIR/trials.csv" <<'CSV'
 dataset,subject_id,session_id,trial_id,condition,label_text,label_type,start_sample,end_sample,start_sec,end_sec,split,source_file
 CSV
+  echo "[INFO] Created empty trials.csv template."
+else
+  echo "[INFO] trials.csv already exists with data — not overwriting."
+fi
 
 cat > "$META_DIR/label_map.json" <<'JSON'
 {

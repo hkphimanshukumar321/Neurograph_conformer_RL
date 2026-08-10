@@ -13,7 +13,17 @@ def fix_trials_csv():
         logger.error(f"Cannot find {trials_csv}")
         return
         
-    df = pd.read_csv(trials_csv)
+    try:
+        df = pd.read_csv(trials_csv)
+    except pd.errors.EmptyDataError:
+        logger.error(f"trials.csv is empty or has no columns: {trials_csv}")
+        logger.error("Run build_manifests.py first to populate trials.csv with data.")
+        return
+    
+    if df.empty:
+        logger.warning(f"trials.csv has headers but 0 data rows: {trials_csv}")
+        return
+    
     initial_len = len(df)
     
     # Filter out anything that isn't a valid raw EEG format
