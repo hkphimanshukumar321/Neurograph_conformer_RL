@@ -236,9 +236,31 @@ def main():
     if args.pretrained:
         checkpoint = torch.load(args.pretrained, map_location="cpu", weights_only=False)
         if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
-            model.load_state_dict(checkpoint["model_state_dict"], strict=False)
+            ckpt_state = checkpoint["model_state_dict"]
         else:
-            model.load_state_dict(checkpoint, strict=False)
+            ckpt_state = checkpoint
+
+        # ── Validate d_model compatibility before loading ──
+        _probe_keys = ["mamba.norm.weight", "encoder.layers.0.ff1.net.0.weight"]
+        for _pk in _probe_keys:
+            if _pk in ckpt_state and _pk in model.state_dict():
+                _ckpt_dim = ckpt_state[_pk].shape[0]
+                _model_dim = model.state_dict()[_pk].shape[0]
+                if _ckpt_dim != _model_dim:
+                    raise RuntimeError(
+                        f"FATAL: Checkpoint/model d_model mismatch detected!\n"
+                        f"  Probe key: {_pk}\n"
+                        f"  Checkpoint dimension: {_ckpt_dim}\n"
+                        f"  Current model dimension: {_model_dim}\n"
+                        f"  Checkpoint path: {args.pretrained}\n"
+                        f"  Model config: {args.config}\n\n"
+                        f"The checkpoint was trained with a DIFFERENT architecture config.\n"
+                        f"Fix: Either re-train Phase 1 with the current config, or\n"
+                        f"     change --config to match the config used for the checkpoint."
+                    )
+                break
+
+        model.load_state_dict(ckpt_state, strict=False)
         logger.info(f"Loaded pretrained weights from {args.pretrained}")
 
     # ── Compute adjacency matrix for graph encoder ──
@@ -326,9 +348,28 @@ def main():
             logger.info(f"Loading Stage 3 checkpoint: {stage3_ckpt}")
             checkpoint = torch.load(stage3_ckpt, map_location=args.device, weights_only=False)
             if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
-                model.load_state_dict(checkpoint["model_state_dict"], strict=False)
+                ckpt_state = checkpoint["model_state_dict"]
             else:
-                model.load_state_dict(checkpoint, strict=False)
+                ckpt_state = checkpoint
+
+            # ── Validate d_model compatibility ──
+            _probe_keys = ["mamba.norm.weight", "encoder.layers.0.ff1.net.0.weight"]
+            for _pk in _probe_keys:
+                if _pk in ckpt_state and _pk in model.state_dict():
+                    _ckpt_dim = ckpt_state[_pk].shape[0]
+                    _model_dim = model.state_dict()[_pk].shape[0]
+                    if _ckpt_dim != _model_dim:
+                        raise RuntimeError(
+                            f"FATAL: Stage 3→4 checkpoint/model d_model mismatch!\n"
+                            f"  Probe key: {_pk}\n"
+                            f"  Checkpoint dimension: {_ckpt_dim}\n"
+                            f"  Current model dimension: {_model_dim}\n"
+                            f"  Checkpoint path: {stage3_ckpt}\n\n"
+                            f"All training phases must use the same model config."
+                        )
+                    break
+
+            model.load_state_dict(ckpt_state, strict=False)
             
             # Initialize RL trainer
             from src.training.rl_trainer import RLTrainer

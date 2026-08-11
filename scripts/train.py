@@ -273,7 +273,49 @@ def main():
     # ── Load pretrained (optional) ──
     if args.pretrained:
         checkpoint = torch.load(args.pretrained, map_location="cpu", weights_only=False)
-        model.load_state_dict(checkpoint["model_state_dict"], strict=False)
+        ckpt_state = checkpoint["model_state_dict"] if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint else checkpoint
+
+        # ── Validate d_model compatibility before loading ──
+        # Detect checkpoint vs model dimension mismatches early to avoid
+        # silently skipping pretrained weights (which defeats pretraining).
+        _probe_keys = ["mamba.norm.weight", "encoder.layers.0.ff1.net.0.weight"]
+        for _pk in _probe_keys:
+            if _pk in ckpt_state and _pk in model.state_dict():
+                _ckpt_dim = ckpt_state[_pk].shape[0]
+                _model_dim = model.state_dict()[_pk].shape[0]
+                if _ckpt_dim != _model_dim:
+                    raise RuntimeError(
+                        f"FATAL: Checkpoint/model d_model mismatch detected!\n"
+                        f"  Probe key: {_pk}\n"
+                        f"  Checkpoint dimension: {_ckpt_dim}\n"
+                        f"  Current model dimension: {_model_dim}\n"
+                        f"  Checkpoint path: {args.pretrained}\n"
+                        f"  Model config: {args.config}\n\n"
+                        f"The checkpoint was trained with a DIFFERENT architecture config.\n"
+                        f"Fix: Either re-train Phase 1 with the current config, or\n"
+                        f"     change --config to match the config used for the checkpoint."
+                    )
+                break  # one successful check is enough
+
+        result = model.load_state_dict(ckpt_state, strict=False)
+        if result.missing_keys:
+            logger.warning(f"Pretrained checkpoint missing {len(result.missing_keys)} keys (new layers): "
+                           f"{result.missing_keys[:5]}{'...' if len(result.missing_keys) > 5 else ''}")
+        if result.unexpected_keys:
+            logger.warning(f"Pretrained checkpoint has {len(result.unexpected_keys)} unexpected keys: "
+                           f"{result.unexpected_keys[:5]}{'...' if len(result.unexpected_keys) > 5 else ''}")
+        # Detect shape mismatches: keys present in both but not loaded (missing due to size mismatch)
+        ckpt_keys = set(ckpt_state.keys())
+        model_keys = set(model.state_dict().keys())
+        common_but_missing = ckpt_keys & model_keys & set(result.missing_keys)
+        if common_but_missing:
+            logger.error(
+                f"SHAPE MISMATCH: {len(common_but_missing)} keys exist in both checkpoint and model "
+                f"but have incompatible shapes. The pretrained weights for these layers were NOT loaded. "
+                f"Keys: {sorted(common_but_missing)[:5]}... "
+                f"This usually means the checkpoint was saved with a different d_model. "
+                f"Ensure all training phases use the same model config."
+            )
         logger.info(f"Loaded pretrained weights from {args.pretrained}")
 
     # ── Train ──
